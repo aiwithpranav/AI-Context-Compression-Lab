@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Context Compression Lab — LLM Context & Compression</title>
+  <meta name="description"
+    content="Compress large text into concise summaries and key points. Explore context windows, token usage, and information preservation in this LLM learning project." />
+  <meta property="og:title" content="Context Compression Lab" />
+  <meta property="og:description"
+    content="Demonstrate LLM context compression — summarize, extract key points, and measure meaning preservation." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       HEADER
+  ════════════════════════════════════════════════════════════════ -->
+  <header class="site-header" role="banner">
+    <div class="header-inner">
+      <div class="header-brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="28" height="28" rx="8" fill="url(#brandGrad)" />
+            <path d="M7 9h14M7 14h10M7 19h7" stroke="white" stroke-width="2" stroke-linecap="round" />
+            <path d="M20 16l3 3-3 3" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            <defs>
+              <linearGradient id="brandGrad" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#6366F1" />
+                <stop offset="1" stop-color="#8B5CF6" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Context Compression Lab</span>
+
+        </div>
+      </div>
+      <nav class="header-nav" aria-label="Project tags">
+        <span class="nav-tag">LLM</span>
+        <span class="nav-tag">CONTEXT</span>
+        <span class="nav-tag">COMPRESSION</span>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         HERO SECTION
+    ════════════════════════════════════════════════════════════════ -->
+    <section class="hero-section" aria-labelledby="hero-heading">
+      <div class="hero-inner">
+        <div class="hero-label">
+          <span class="label-dot"></span>
+          Context Window Exploration
+        </div>
+        <h1 id="hero-heading" class="hero-heading">
+          Make Large Context Smaller.<br />
+          <span class="heading-accent">Keep the Meaning.</span>
+        </h1>
+        <p class="hero-subtext">
+          Compress lengthy information into concise summaries and key points while understanding
+          exactly how much context you actually save.
+        </p>
+
+        <!-- Concept Flow Diagram -->
+        <div class="concept-flow" role="img" aria-label="LLM compression pipeline flow">
+          <div class="flow-item">
+            <div class="flow-icon">📄</div>
+            <span class="flow-label">Large Context</span>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-item">
+            <div class="flow-icon">🔢</div>
+            <span class="flow-label">Tokenization</span>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-item">
+            <div class="flow-icon">🪟</div>
+            <span class="flow-label">Context Window</span>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-item">
+            <div class="flow-icon">⚡</div>
+            <span class="flow-label">Compression</span>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-item flow-item--highlight">
+            <div class="flow-icon">✨</div>
+            <span class="flow-label">Smaller Context</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         INPUT SECTION
+    ════════════════════════════════════════════════════════════════ -->
+    <section id="input-section" class="input-section" aria-labelledby="input-heading">
+      <div class="section-inner">
+
+        <div class="section-header">
+          <h2 id="input-heading" class="section-title">Compress Your Context</h2>
+          <p class="section-subtitle">
+            Paste a large paragraph or document and turn it into a smaller, meaningful representation.
+          </p>
+        </div>
+
+        <!-- Live Stats Bar -->
+        <div class="live-stats-bar" role="status" aria-live="polite" aria-label="Input statistics">
+          <div class="stat-chip">
+            <span class="stat-chip-label">Characters</span>
+            <span class="stat-chip-value" id="stat-chars">0</span>
+          </div>
+          <div class="stat-chip-divider" aria-hidden="true"></div>
+          <div class="stat-chip">
+            <span class="stat-chip-label">Words</span>
+            <span class="stat-chip-value" id="stat-words">0</span>
+          </div>
+          <div class="stat-chip-divider" aria-hidden="true"></div>
+          <div class="stat-chip">
+            <span class="stat-chip-label">Est. Tokens</span>
+            <span class="stat-chip-value" id="stat-tokens">~0</span>
+          </div>
+        </div>
+
+        <!-- Textarea -->
+        <div class="textarea-wrapper">
+          <textarea id="input-textarea" class="input-textarea" placeholder="Paste your text here..."
+            aria-label="Text input for compression" aria-describedby="textarea-hint" rows="10"
+            spellcheck="false"></textarea>
+          <div class="textarea-corner-hint" id="textarea-hint">
+            Drag to resize ↕
+          </div>
+        </div>
+
+        <!-- Compression Level Selector -->
+        <div class="compression-level-control" role="group" aria-labelledby="level-control-label">
+          <span id="level-control-label" class="level-control-label">Compression Level</span>
+          <div class="level-options">
+            <label class="level-option">
+              <input type="radio" name="compression-level" value="light"
+                aria-label="Light compression: preserves most information" />
+              <span class="level-option-pill">
+                <span class="level-option-icon" aria-hidden="true">💡</span>
+                <span class="level-option-name">Light</span>
+                <span class="level-option-desc">More content, slightly shorter</span>
+              </span>
+            </label>
+            <label class="level-option">
+              <input type="radio" name="compression-level" value="balanced" checked
+                aria-label="Balanced compression: balances size and meaning" />
+              <span class="level-option-pill">
+                <span class="level-option-icon" aria-hidden="true">⚖️</span>
+                <span class="level-option-name">Balanced</span>
+                <span class="level-option-desc">Balance of size &amp; meaning</span>
+              </span>
+            </label>
+            <label class="level-option">
+              <input type="radio" name="compression-level" value="aggressive"
+                aria-label="Aggressive compression: maximum size reduction" />
+              <span class="level-option-pill">
+                <span class="level-option-icon" aria-hidden="true">🗜️</span>
+                <span class="level-option-name">Aggressive</span>
+                <span class="level-option-desc">Maximum context reduction</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="actions-row" role="group" aria-label="Compression actions">
+          <div class="actions-primary">
+            <button id="btn-summary" class="btn btn-primary" type="button" aria-label="Generate summary">
+              <span class="btn-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+              </span>
+              Make Summary
+            </button>
+            <button id="btn-keypoints" class="btn btn-secondary" type="button" aria-label="Extract key points">
+              <span class="btn-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="4" cy="5" r="1.5" fill="currentColor" />
+                  <path d="M7 5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  <circle cx="4" cy="11" r="1.5" fill="currentColor" />
+                  <path d="M7 11h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+              </span>
+              Key Points
+            </button>
+            <button id="btn-both" class="btn btn-accent" type="button" aria-label="Generate summary and key points">
+              <span class="btn-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M2 3h12M2 7h9M2 11h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  <circle cx="13" cy="11" r="2" fill="currentColor" />
+                </svg>
+              </span>
+              Summary + Key Points
+            </button>
+          </div>
+          <div class="actions-secondary">
+            <button id="btn-try-again" class="btn btn-ghost" type="button" aria-label="Try another compression"
+              style="display:none;">
+              <span class="btn-icon" aria-hidden="true">↺</span>
+              Try Again
+            </button>
+            <button id="btn-clear" class="btn btn-ghost btn-danger" type="button"
+              aria-label="Clear all input and results">
+              <span class="btn-icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+              </span>
+              Clear
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         PROCESSING STATE
+    ════════════════════════════════════════════════════════════════ -->
+    <section id="processing-section" class="processing-section hidden" aria-live="polite"
+      aria-label="Processing status">
+      <div class="section-inner">
+        <div class="processing-card">
+          <div class="processing-animation">
+            <div class="proc-spinner" aria-hidden="true">
+              <div class="spinner-ring"></div>
+              <div class="spinner-dot"></div>
+            </div>
+          </div>
+          <div class="processing-text">
+            <p id="processing-label" class="proc-label">Analyzing Context...</p>
+            <p id="processing-sublabel" class="proc-sublabel">Reading your input text</p>
+          </div>
+          <div class="processing-dots" aria-hidden="true">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         EMPTY STATE
+    ════════════════════════════════════════════════════════════════ -->
+    <section id="empty-state" class="empty-state-section" aria-label="Getting started prompt">
+      <div class="section-inner">
+        <div class="empty-state-card">
+          <div class="empty-icon" aria-hidden="true">📋</div>
+          <h3 class="empty-title">Paste Your Text Above</h3>
+          <p class="empty-subtitle">Enter any text — an article, document, or paragraph — then choose how to compress
+            it.</p>
+          <div class="empty-hints">
+            <div class="hint-chip">📝 Article summaries</div>
+            <div class="hint-chip">📚 Research notes</div>
+            <div class="hint-chip">📧 Long emails</div>
+            <div class="hint-chip">📖 Book excerpts</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         ERROR STATE
+    ════════════════════════════════════════════════════════════════ -->
+    <section id="error-state" class="error-state-section hidden" role="alert" aria-live="assertive">
+      <div class="section-inner">
+        <div class="error-card">
+          <div class="error-icon" aria-hidden="true">⚠️</div>
+          <h3 class="error-title">Something Went Wrong</h3>
+          <p id="error-message" class="error-message">An error occurred.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         RESULTS SECTION
+    ════════════════════════════════════════════════════════════════ -->
+    <section id="results-section" class="results-section hidden" aria-labelledby="results-heading">
+      <div class="section-inner">
+        <div class="results-header">
+          <div class="results-header-top">
+            <h2 id="results-heading" class="section-title">Compression Results</h2>
+            <span id="results-level-badge" class="results-level-badge" aria-label="Compression level used"></span>
+          </div>
+          <p class="section-subtitle">Your text has been analyzed, compressed, and evaluated below.</p>
+        </div>
+
+        <div class="results-grid">
+
+          <!-- ── Summary Card ── -->
+          <article id="summary-card" class="result-card hidden" aria-labelledby="summary-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon summary-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M3 5h12M3 9h9M3 13h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  </svg>
+                </div>
+                <h3 id="summary-heading" class="card-title">Summary</h3>
+              </div>
+              <div class="card-badge">Extractive</div>
+            </div>
+
+            <div class="card-body">
+              <p id="summary-text" class="summary-text"></p>
+            </div>
+
+            <div class="card-meta-row">
+              <div class="meta-stat">
+                <span class="meta-label">Original</span>
+                <span class="meta-value" id="summary-orig-len">—</span>
+              </div>
+              <div class="meta-arrow" aria-hidden="true">→</div>
+              <div class="meta-stat">
+                <span class="meta-label">Compressed</span>
+                <span class="meta-value" id="summary-comp-len">—</span>
+              </div>
+              <div class="meta-divider" aria-hidden="true"></div>
+              <div class="meta-stat meta-stat--highlight">
+                <span class="meta-label">Ratio</span>
+                <span class="meta-value" id="summary-ratio">—</span>
+              </div>
+              <div class="meta-stat meta-stat--highlight">
+                <span class="meta-label">Reduction</span>
+                <span class="meta-value" id="summary-reduction">—</span>
+              </div>
+            </div>
+
+            <div class="card-footer">
+              <button id="btn-copy-summary" class="btn btn-copy" type="button" aria-label="Copy summary to clipboard">
+                <span class="copy-icon" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <rect x="3" y="3" width="8" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" />
+                    <path d="M5 3V2a1 1 0 011-1h5a1 1 0 011 1v8a1 1 0 01-1 1h-1" stroke="currentColor"
+                      stroke-width="1.4" stroke-linecap="round" />
+                  </svg>
+                </span>
+                Copy Summary
+              </button>
+            </div>
+          </article>
+
+          <!-- ── Key Points Card ── -->
+          <article id="keypoints-card" class="result-card hidden" aria-labelledby="keypoints-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon keypoints-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <circle cx="5" cy="6" r="2" fill="currentColor" />
+                    <path d="M9 6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    <circle cx="5" cy="12" r="2" fill="currentColor" />
+                    <path d="M9 12h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  </svg>
+                </div>
+                <h3 id="keypoints-heading" class="card-title">Key Points</h3>
+              </div>
+              <div class="card-badge card-badge--green">Structured</div>
+            </div>
+
+            <div class="card-body">
+              <ul id="keypoints-list" class="keypoints-list" aria-label="Extracted key points"></ul>
+            </div>
+
+            <div class="card-footer">
+              <button id="btn-copy-keypoints" class="btn btn-copy" type="button"
+                aria-label="Copy key points to clipboard">
+                <span class="copy-icon" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <rect x="3" y="3" width="8" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" />
+                    <path d="M5 3V2a1 1 0 011-1h5a1 1 0 011 1v8a1 1 0 01-1 1h-1" stroke="currentColor"
+                      stroke-width="1.4" stroke-linecap="round" />
+                  </svg>
+                </span>
+                Copy Key Points
+              </button>
+            </div>
+          </article>
+
+          <!-- ── Context Window Analytics Card ── -->
+          <article id="analytics-card" class="result-card result-card--wide hidden" aria-labelledby="analytics-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon analytics-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <rect x="2" y="10" width="3" height="6" rx="1" fill="currentColor" />
+                    <rect x="7" y="6" width="3" height="10" rx="1" fill="currentColor" />
+                    <rect x="12" y="2" width="3" height="14" rx="1" fill="currentColor" />
+                  </svg>
+                </div>
+                <h3 id="analytics-heading" class="card-title">Context Window</h3>
+              </div>
+              <div class="card-badge card-badge--purple">Analytics</div>
+            </div>
+
+            <div class="card-body">
+              <div class="analytics-grid">
+                <!-- Original -->
+                <div class="analytics-column analytics-column--original">
+                  <div class="analytics-col-label">
+                    <span class="col-indicator col-indicator--original" aria-hidden="true"></span>
+                    Original Context
+                  </div>
+                  <div class="analytics-stat-list">
+                    <div class="analytics-stat">
+                      <span class="a-stat-label">Characters</span>
+                      <span class="a-stat-value" id="stat-orig-chars">—</span>
+                    </div>
+                    <div class="analytics-stat">
+                      <span class="a-stat-label">Words</span>
+                      <span class="a-stat-value" id="stat-orig-words">—</span>
+                    </div>
+                    <div class="analytics-stat a-stat--tokens">
+                      <span class="a-stat-label">Est. Tokens</span>
+                      <span class="a-stat-value a-stat-value--large" id="stat-orig-tokens">—</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Arrow Divider -->
+                <div class="analytics-divider" aria-hidden="true">
+                  <div class="divider-arrow">⟶</div>
+                  <div class="divider-label">compressed to</div>
+                </div>
+
+                <!-- Compressed -->
+                <div class="analytics-column analytics-column--compressed">
+                  <div class="analytics-col-label">
+                    <span class="col-indicator col-indicator--compressed" aria-hidden="true"></span>
+                    Compressed Context
+                  </div>
+                  <div class="analytics-stat-list">
+                    <div class="analytics-stat">
+                      <span class="a-stat-label">Characters</span>
+                      <span class="a-stat-value" id="stat-comp-chars">—</span>
+                    </div>
+                    <div class="analytics-stat">
+                      <span class="a-stat-label">Words</span>
+                      <span class="a-stat-value" id="stat-comp-words">—</span>
+                    </div>
+                    <div class="analytics-stat a-stat--tokens">
+                      <span class="a-stat-label">Est. Tokens</span>
+                      <span class="a-stat-value a-stat-value--large" id="stat-comp-tokens">—</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Summary Stats -->
+                <div class="analytics-column analytics-column--summary">
+                  <div class="analytics-col-label">
+                    <span class="col-indicator col-indicator--saved" aria-hidden="true"></span>
+                    Compression Metrics
+                  </div>
+                  <div class="analytics-stat-list">
+                    <div class="analytics-stat">
+                      <span class="a-stat-label">Tokens Saved</span>
+                      <span class="a-stat-value a-stat-value--saved" id="stat-tokens-saved">—</span>
+                    </div>
+                    <div class="analytics-stat">
+                      <span class="a-stat-label">Context Reduction</span>
+                      <span class="a-stat-value a-stat-value--large a-stat-value--accent" id="stat-context-red">—</span>
+                    </div>
+                    <div class="analytics-stat">
+                      <span class="a-stat-label">Compression Ratio</span>
+                      <span class="a-stat-value a-stat-value--large a-stat-value--ratio"
+                        id="stat-compression-ratio">—</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ── Concept Coverage / Meaning Preservation Card ── -->
+          <article id="preservation-card" class="result-card hidden" aria-labelledby="preservation-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon preservation-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M9 2l1.8 3.6L15 6.3l-3 3 .7 4.2L9 11.5l-3.7 2L6 9.3l-3-3 4.2-.7L9 2z" stroke="currentColor"
+                      stroke-width="1.4" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <h3 id="preservation-heading" class="card-title">Concept Coverage</h3>
+              </div>
+              <div id="preservation-level" class="preservation-badge" aria-live="polite">—</div>
+            </div>
+
+            <div class="card-body">
+              <p class="preservation-subtitle">Concept coverage estimates how many important concepts from the original
+                text are represented in the compressed version.</p>
+              <div class="preservation-meter">
+                <div class="preservation-bar-track" role="progressbar" aria-label="Concept coverage score"
+                  aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                  <div id="preservation-bar" class="preservation-fill" style="width: 0%"></div>
+                </div>
+                <div class="preservation-pct-label">
+                  <span id="preservation-pct" class="pct-value">0%</span>
+                  <span id="preservation-pct-label" class="pct-label">concept coverage</span>
+                </div>
+              </div>
+              <p id="preservation-text" class="preservation-explanation"></p>
+              <p id="preservation-disclaimer" class="preservation-disclaimer-text"></p>
+            </div>
+          </article>
+
+          <!-- ── Memory Trick Card ── -->
+          <article id="memory-card" class="result-card result-card--memory hidden" aria-labelledby="memory-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon memory-icon" aria-hidden="true">🧠</div>
+                <h3 id="memory-heading" class="card-title">Memory Trick</h3>
+              </div>
+              <span id="memory-type" class="card-badge card-badge--brain">—</span>
+            </div>
+
+            <div class="card-body">
+              <div class="memory-mnemonic-box">
+                <p id="memory-mnemonic" class="memory-mnemonic"></p>
+              </div>
+              <p id="memory-explanation" class="memory-explanation"></p>
+            </div>
+
+            <div class="card-footer">
+              <button id="btn-copy-memory" class="btn btn-copy" type="button"
+                aria-label="Copy memory trick to clipboard">
+                <span class="copy-icon" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <rect x="3" y="3" width="8" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" />
+                    <path d="M5 3V2a1 1 0 011-1h5a1 1 0 011 1v8a1 1 0 01-1 1h-1" stroke="currentColor"
+                      stroke-width="1.4" stroke-linecap="round" />
+                  </svg>
+                </span>
+                Copy Memory Trick
+              </button>
+            </div>
+          </article>
+
+        </div><!-- /results-grid -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       FOOTER
+  ════════════════════════════════════════════════════════════════ -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="footer-inner">
+      <p class="footer-text">
+        Built to explore <strong>LLM Context Windows &amp; Compression</strong>
+      </p>
+      <div class="footer-meta">
+        <span class="footer-dot" aria-hidden="true">·</span>
+        <span>LLM Learning Series</span>
+        <span class="footer-dot" aria-hidden="true">·</span>
+        <span>Algorithmic NLP · No external API</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts — load order matters (dependencies first) -->
+  <script src="js/tokenizer.js"></script>
+  <script src="js/textProcessor.js"></script>
+  <script src="js/summarizer.js"></script>
+  <script src="js/keyPoints.js"></script>
+  <script src="js/statistics.js"></script>
+  <script src="js/preservation.js"></script>
+  <script src="js/memoryTrick.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+
+</html>

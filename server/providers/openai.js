@@ -14,6 +14,9 @@ export const name = 'openai';
 // over time, so this is configurable rather than hard-wired.
 export const model = () => process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
+// Text-to-speech model; configurable because model names change.
+export const ttsModel = () => process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
+
 export const ready = () => Boolean(process.env.OPENAI_API_KEY);
 
 let _client = null;
@@ -72,5 +75,21 @@ export function countTokens(texts) {
     return texts.map(t => encode(t).length);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Speak up to ~4000 characters and return an MP3 as a Buffer.
+ * (The API's input limit is 4096 characters; callers split longer text.)
+ */
+export async function speak(text, { voice = 'alloy' } = {}) {
+  try {
+    const res = await client().audio.speech.create({ model: ttsModel(), voice, input: text, response_format: 'mp3' });
+    return Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    if (err instanceof OpenAI.NotFoundError) {
+      throw new LlmError(`OpenAI text-to-speech model "${ttsModel()}" was not found for your account. Set OPENAI_TTS_MODEL to one you can use.`, 400);
+    }
+    throw translateError(err);
   }
 }

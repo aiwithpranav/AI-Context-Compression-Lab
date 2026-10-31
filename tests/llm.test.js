@@ -343,3 +343,167 @@ test('GEMINI_MODEL pins one model and disables the fallback', async () => {
     delete process.env.GEMINI_MODEL;
   }
 });
+
+// ─── Meeting recordings (Gemini Files API) ─────────────────────────────────
+
+const mp3 = Buffer.from('ID3 fake mp3 bytes');
+const uploaded = async () => llm.uploadMedia({ buffer: mp3, filename: 'weekly-sync.MP3' });
+
+test('mediaTypeFor takes the type from the extension and knows audio from video', () => {
+  assert.deepEqual(P.mediaTypeFor('standup.MP3'), { mimeType: 'audio/mpeg', kind: 'audio' });
+  assert.deepEqual(P.mediaTypeFor('call.m4a'), { mimeType: 'audio/mp4', kind: 'audio' });
+  assert.deepEqual(P.mediaTypeFor('zoom_0.mp4'), { mimeType: 'video/mp4', kind: 'video' });
+  assert.equal(P.mediaTypeFor('notes.pdf'), null);
+  assert.equal(P.mediaTypeFor('malware.exe'), null);
+  assert.equal(P.mediaTypeFor('noextension'), null);
+});
+
+test('the prompt for a recording talks about listening, not watching', () => {
+  const audio = P.buildVideoSystem({ level: 'balanced', mode: 'both', media: 'audio' });
+  const video = P.buildVideoSystem({ level: 'balanced', mode: 'both', media: 'video' });
+  assert.match(audio, /audio recording/);
+  assert.match(audio, /Never invent names/);
+  assert.match(video, /what is shown on screen/);
+  assert.doesNotMatch(audio, /shown on screen/);
+});
+
+test('question prompt pins the answer language to the question language', () => {
+  assert.match(P.VIDEO_QA_SYSTEM, /same language as the question/);
+  assert.match(P.VIDEO_QA_SYSTEM, /Never switch to another language/);
+});
+
+test('uploadMedia uses the resumable protocol and returns the file reference', async () => {
+  geminiFake.requests.length = 0;
+  const out = await uploaded();
+
+  const start = geminiFake.requests.find(r => r.path === '/upload/v1beta/files');
+  assert.equal(start.headers['x-goog-upload-protocol'], 'resumable');
+  assert.equal(start.headers['x-goog-upload-header-content-type'], 'audio/mpeg');
+  assert.equal(start.headers['x-goog-upload-header-content-length'], String(mp3.length));
+  const finish = geminiFake.requests.find(r => r.path.startsWith('/upload/session/'));
+  assert.equal(finish.headers['x-goog-upload-command'], 'upload, finalize');
+  assert.equal(finish.bytes, mp3.length);
+
+  assert.equal(out.kind, 'audio');
+  assert.equal(out.mimeType, 'audio/mpeg');
+  assert.match(out.fileUri, /\/v1beta\/files\/fake\d+$/);
+});
+
+test('uploadMedia waits until Gemini has finished processing the file', async () => {
+  await withFake({ processingPolls: 2 }, async (fake) => {
+    const out = await llm.uploadMedia({ buffer: mp3, filename: 'meeting.mp4' });
+    assert.ok(out.fileUri);
+    const polls = fake.requests.filter(r => r.method === 'GET' && /\/files\/fake/.test(r.path));
+    assert.equal(polls.length, 2, 'checked the status until it was ACTIVE');
+  });
+});
+
+test('uploadMedia rejects unsupported and oversize files before uploading', async () => {
+  geminiFake.requests.length = 0;
+  await assert.rejects(llm.uploadMedia({ buffer: mp3, filename: 'notes.pdf' }), (e) => e.httpStatus === 422 && /Unsupported recording type/.test(e.message));
+  await assert.rejects(llm.uploadMedia({ buffer: { length: P.MAX_MEDIA_BYTES + 1 }, filename: 'huge.mp4' }), (e) => e.httpStatus === 413 && /200 MB/.test(e.message));
+  assert.equal(geminiFake.requests.length, 0, 'nothing was sent to Gemini');
+});
+
+test('a recording is summarised from its file reference, with time stamps', async () => {
+  const media = await uploaded();
+  geminiFake.requests.length = 0;
+  const out = await llm.videoCompress({ media: { fileUri: media.fileUri, mimeType: media.mimeType }, kind: 'audio', mode: 'both', level: 'balanced' });
+
+  const gen = geminiFake.requests.find(r => r.path.includes(':generateContent')).body;
+  assert.deepEqual(gen.contents[0].parts[0].fileData, { mimeType: 'audio/mpeg', fileUri: media.fileUri });
+  assert.match(gen.systemInstruction.parts[0].text, /audio recording/);
+  assert.equal(out.videoId, null, 'a recording has no YouTube id, so no YouTube links');
+  assert.equal(out.keyPoints[0].time, 65);
+});
+
+test('questions about a recording attach the same file', async () => {
+  const media = await uploaded();
+  geminiFake.requests.length = 0;
+  const out = await llm.videoAsk({ media: { fileUri: media.fileUri, mimeType: media.mimeType }, question: 'Who owns load testing?' });
+  const gen = geminiFake.requests.find(r => r.path.includes(':generateContent')).body;
+  assert.equal(gen.contents[0].parts[0].fileData.fileUri, media.fileUri);
+  assert.ok(out.answer);
+});
+
+test('only files in the Gemini file store can be referenced', async () => {
+  const bad = [
+    'https://evil.example.com/v1beta/files/abc',
+    `${process.env.GEMINI_BASE_URL}/files/../models`,
+    `${process.env.GEMINI_BASE_URL}/files/abc/extra`,
+    'file:///etc/passwd',
+    42,
+    undefined,
+  ];
+  for (const fileUri of bad) {
+    await assert.rejects(llm.videoAsk({ media: { fileUri, mimeType: 'audio/mpeg' }, question: 'hi' }), (e) => e.httpStatus === 400, String(fileUri));
+    await assert.rejects(llm.deleteMedia({ fileUri }), (e) => e.httpStatus === 400, String(fileUri));
+  }
+});
+
+test('deleteMedia removes the file from Gemini', async () => {
+  const media = await uploaded();
+  geminiFake.requests.length = 0;
+  assert.deepEqual(await llm.deleteMedia({ fileUri: media.fileUri }), { deleted: true });
+  assert.ok(geminiFake.requests.some(r => r.method === 'DELETE' && r.path.endsWith(media.fileUri.split('/').pop())));
+  await assert.rejects(llm.videoAsk({ media: { fileUri: media.fileUri, mimeType: media.mimeType }, question: 'still there?' }), /refused access/);
+});
+
+test('recording features say what to set when the Gemini key is missing', async () => {
+  const saved = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    await assert.rejects(llm.uploadMedia({ buffer: mp3, filename: 'a.mp3' }), /GEMINI_API_KEY/);
+  } finally {
+    process.env.GEMINI_API_KEY = saved;
+  }
+});
+
+// ─── Audio briefing (OpenAI text-to-speech) ────────────────────────────────
+
+test('splitForSpeech keeps every piece under the limit and loses no text', () => {
+  const sentence = 'This is one sentence of a briefing. ';
+  const text = sentence.repeat(400);
+  const chunks = llm.splitForSpeech(text, 3500);
+  assert.ok(chunks.length >= 4);
+  assert.ok(chunks.every(c => c.length <= 3500));
+  assert.equal(chunks.join(' ').replace(/\s+/g, ' ').length, text.replace(/\s+/g, ' ').trim().length);
+
+  assert.deepEqual(llm.splitForSpeech('One. Two! Three?'), ['One. Two! Three?']);
+  assert.deepEqual(llm.splitForSpeech('x'.repeat(9000), 3500).map(c => c.length), [3500, 3500, 2000], 'text with no punctuation is cut at the limit');
+});
+
+test('textToSpeech sends the text to OpenAI and returns the MP3 bytes', async () => {
+  openaiFake.requests.length = 0;
+  const out = await llm.textToSpeech({ text: 'Summary. Short rewritten summary.' });
+  const sent = openaiFake.requests.find(r => r.path.endsWith('/audio/speech')).body;
+  assert.equal(sent.model, 'gpt-4o-mini-tts');
+  assert.equal(sent.response_format, 'mp3');
+  assert.equal(sent.input, 'Summary. Short rewritten summary.');
+  assert.equal(out.subarray(0, 3).toString(), 'ID3');
+});
+
+test('a long briefing is spoken in several requests and joined into one file', async () => {
+  openaiFake.requests.length = 0;
+  const text = 'This is one sentence of a briefing. '.repeat(250);   // ~9,000 characters
+  const out = await llm.textToSpeech({ text });
+  const calls = openaiFake.requests.filter(r => r.path.endsWith('/audio/speech'));
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every(c => c.body.input.length <= 4096));
+  assert.equal(out.toString().split('ID3').length - 1, 3, 'three pieces joined');
+});
+
+test('textToSpeech refuses empty text and anything over the cost guard', async () => {
+  await assert.rejects(llm.textToSpeech({ text: '   ' }), (e) => e.httpStatus === 400);
+  await assert.rejects(llm.textToSpeech({ text: 'a. '.repeat(llm.TTS_MAX_CHARS) }), (e) => e.httpStatus === 413);
+});
+
+test('text-to-speech says what to set when the OpenAI key is missing', async () => {
+  const saved = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    await assert.rejects(llm.textToSpeech({ text: 'hello there' }), /OPENAI_API_KEY/);
+  } finally {
+    process.env.OPENAI_API_KEY = saved;
+  }
+});

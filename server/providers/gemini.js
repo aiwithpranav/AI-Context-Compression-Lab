@@ -192,7 +192,12 @@ function parseJsonText(text) {
   }
 }
 
-const videoPart = (url) => ({ fileData: { fileUri: url } });
+// A YouTube URL, or a file previously uploaded to Gemini ({ fileUri, mimeType }).
+function mediaPart({ videoUrl, media }) {
+  return media
+    ? { fileData: { mimeType: media.mimeType, fileUri: media.fileUri } }
+    : { fileData: { fileUri: videoUrl } };
+}
 
 async function generateWith(m, { system, contents, schema, lowResolution }) {
   const path = `models/${m}:generateContent`;
@@ -230,8 +235,8 @@ async function generateWith(m, { system, contents, schema, lowResolution }) {
  * Structured call, optionally about a YouTube video.
  * Returns { data, usage: { inputTokens } } like the OpenAI provider.
  */
-export async function generateJson({ system, user, schema, videoUrl, lowResolution = false }) {
-  const parts = [...(videoUrl ? [videoPart(videoUrl)] : []), { text: user }];
+export async function generateJson({ system, user, schema, videoUrl, media, lowResolution = false }) {
+  const parts = [...(videoUrl || media ? [mediaPart({ videoUrl, media })] : []), { text: user }];
   const contents = [{ role: 'user', parts }];
   const { text, usage } = await withFallback(m => generateWith(m, { system, contents, schema, lowResolution }));
   return { data: parseJsonText(text), usage: { inputTokens: usage.promptTokenCount ?? null } };
@@ -241,14 +246,14 @@ export async function generateJson({ system, user, schema, videoUrl, lowResoluti
  * Free-text answer about a video. The video is attached to the first turn;
  * `history` is [{ role: 'user'|'model', text }] of earlier turns.
  */
-export async function askVideo({ system, videoUrl, history = [], question }) {
+export async function askVideo({ system, videoUrl, media, history = [], question }) {
   const turns = [...history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', text: h.text })), { role: 'user', text: question }];
   const contents = turns.map((t, i) => ({
     role: t.role,
-    parts: i === 0 && t.role === 'user' ? [videoPart(videoUrl), { text: t.text }] : [{ text: t.text }],
+    parts: i === 0 && t.role === 'user' ? [mediaPart({ videoUrl, media }), { text: t.text }] : [{ text: t.text }],
   }));
   // History must start with the user turn that carries the video.
-  if (contents[0].role !== 'user') contents.unshift({ role: 'user', parts: [videoPart(videoUrl), { text: 'Here is the video.' }] });
+  if (contents[0].role !== 'user') contents.unshift({ role: 'user', parts: [mediaPart({ videoUrl, media }), { text: 'Here is the recording.' }] });
 
   const body = (config) => ({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: config });
 
@@ -271,4 +276,77 @@ export async function countTextTokens(text) {
   const m = await model();
   const data = await request(`models/${m}:countTokens`, { body: { contents: [{ parts: [{ text }] }] } });
   return data.totalTokens;
+}
+
+// ─── Uploaded recordings (Gemini Files API) ────────────────────────────────
+// Meeting recordings are not public URLs, so they are uploaded to Gemini's file
+// store. Files are deleted by Google after 48 hours; we also delete on request.
+
+const UPLOAD_TIMEOUT_MS = 600_000;
+const PROCESS_TIMEOUT_MS = 300_000;
+
+/** Only files in Gemini's own store may be referenced (stops arbitrary URLs being passed through). */
+export function isGeminiFileUri(uri) {
+  return typeof uri === 'string' && uri.startsWith(`${baseUrl()}/files/`) && /^[A-Za-z0-9_-]+$/.test(uri.slice(`${baseUrl()}/files/`.length));
+}
+
+const fileIdOf = (uri) => uri.slice(`${baseUrl()}/files/`.length);
+
+/**
+ * Upload bytes with the resumable protocol, then wait until Gemini has
+ * processed them. Returns { fileUri, mimeType }.
+ */
+export async function uploadFile(buffer, mimeType, displayName) {
+  const origin = new URL(baseUrl()).origin;
+  let start;
+  try {
+    start = await fetch(`${origin}/upload/v1beta/files`, {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': apiKey(),
+        'X-Goog-Upload-Protocol': 'resumable',
+        'X-Goog-Upload-Command': 'start',
+        'X-Goog-Upload-Header-Content-Length': String(buffer.length),
+        'X-Goog-Upload-Header-Content-Type': mimeType,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ file: { display_name: String(displayName || 'recording').slice(0, 100) } }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    throw new LlmError('Could not reach the Gemini API.', 502);
+  }
+  if (!start.ok) throw httpError(start.status, await start.json().catch(() => null));
+  const uploadUrl = start.headers.get('x-goog-upload-url');
+  if (!uploadUrl) throw new LlmError('Gemini did not accept the upload.', 502);
+
+  let done;
+  try {
+    done = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: { 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' },
+      body: buffer,
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err && err.name === 'TimeoutError') throw new LlmError('Uploading the recording took too long.', 504);
+    throw new LlmError('The upload to Gemini failed. Please try again.', 502);
+  }
+  if (!done.ok) throw httpError(done.status, await done.json().catch(() => null));
+  let file = (await done.json()).file;
+
+  // Video needs processing before it can be used; audio is usually ready at once.
+  const deadline = Date.now() + PROCESS_TIMEOUT_MS;
+  while (file.state && file.state !== 'ACTIVE') {
+    if (file.state === 'FAILED') throw new LlmError('Gemini could not process this recording. Try another format.', 422);
+    if (Date.now() > deadline) throw new LlmError('Gemini is taking too long to process the recording.', 504);
+    await new Promise(r => setTimeout(r, 2000));
+    file = await request(file.name, { method: 'GET' });
+  }
+  return { fileUri: file.uri, mimeType: file.mimeType || mimeType };
+}
+
+/** Delete an uploaded file now instead of waiting for Google's 48-hour expiry. */
+export async function deleteFile(fileUri) {
+  await request(`files/${fileIdOf(fileUri)}`, { method: 'DELETE' });
 }

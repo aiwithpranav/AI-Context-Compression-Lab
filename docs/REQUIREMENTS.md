@@ -10,7 +10,7 @@ Context Compression Lab turns long material — text, documents, meeting transcr
 
 **In scope:** compression with LLMs and a classical baseline, token accounting, loss measurement, video summaries with follow-up questions, document and transcript input.
 
-**Out of scope (v1.0):** transcribing uploaded audio/video files, OCR for scanned PDFs, user accounts or multi-user hosting, storing any user content, public deployment hardening (auth, rate limiting).
+**Out of scope (v1.0):** fetching Zoom or Google Meet recording **links** (they are private and need the owner's login — download the recording and upload the file instead), OCR for scanned PDFs, speaker diarisation, transcribing in real time, user accounts or multi-user hosting, storing any user content, public deployment hardening (auth, rate limiting).
 
 ## 2. Users
 
@@ -40,6 +40,8 @@ Priority: **M** = must, **S** = should.
 | **FR-12** | The user can have the summary or key points **read aloud** (play, pause, resume). | S |
 | **FR-13** | The application **degrades gracefully**: with no API keys the offline engine, uploads, transcripts, captions, token counts and read-aloud still work, and unavailable features are disabled with the reason shown. | M |
 | **FR-14** | The user can **copy** results and **clear** everything. | S |
+| **FR-15** | The user can upload a **meeting recording** (audio: MP3, M4A, WAV, AAC, OGG, FLAC; video: MP4, MOV, WEBM, MPEG, AVI, WMV, 3GP; up to 200 MB). Gemini listens to it and returns a summary, key points and action items with timestamps, and the user can ask questions about it. Unsupported or oversize files are refused before anything is uploaded. The uploaded file is deleted from Gemini when the user clears the page or closes the tab. | M |
+| **FR-16** | From any result the user can create an **audio briefing** — an MP3 of the summary, key points and action items — to play in the page or download, for listening where reading is not possible (for example while driving). It must keep playing with the phone screen locked once downloaded. | M |
 
 ## 4. Non-functional requirements
 
@@ -55,6 +57,8 @@ Priority: **M** = must, **S** = should.
 | **NFR-8** | Maintainability | No build step. Prompts and schemas are provider-neutral so a provider can be replaced without touching them. Behaviour is covered by automated tests that run without API keys. |
 | **NFR-9** | Compatibility | Current Chrome, Edge, Firefox and Safari 16.4+; Node.js 20.12 or newer on the server. |
 | **NFR-11** | Performance | A video summary should not stall on a single overloaded model: failing or slow (150 s) models are skipped automatically. Reference measurements, not guarantees: 19-second video ≈ 6 s, 14-minute talk ≈ 27 s (free tier, Oct 2026). |
+| **NFR-12** | Privacy | An uploaded recording leaves the machine only for Gemini, is not kept by this server, and is deleted from Gemini on Clear / tab close (Google also expires files after 48 hours). The user is told this before uploading. |
+| **NFR-13** | Cost control | Audio briefings are capped (15,000 characters ≈ 10 minutes of speech) and recordings at 200 MB, so one click cannot run up an unbounded bill. |
 | **NFR-10** | Accessibility | Interactive controls are keyboard-reachable and labelled; status and results use ARIA live regions. |
 
 ## 5. Constraints and assumptions
@@ -81,6 +85,9 @@ Priority: **M** = must, **S** = should.
 | NFR-4 | — | `llm.test.js` (time validation) | — |
 | NFR-5 | — | `llm.test.js`, `server.test.js` (errors, malformed URL) | — |
 | NFR-6 | — | `client.test.js` (huge vocabulary) | — |
+| FR-15 | ADR-0008, ARCHITECTURE §3.6 | `llm.test.js` (upload protocol, processing wait, type/size limits, summary, Q&A, delete, file-store validation), `server.test.js` (upload → summarise → ask → delete, errors, Origin) | MT-11 |
+| FR-16 | ADR-0008, ARCHITECTURE §3.7 | `llm.test.js` (chunking, joining, cost guard, missing key), `server.test.js` (MP3 response, validation) | MT-12 |
 | NFR-11 | ADR-0004 | `llm.test.js` (model ranking and fallback) | MT-6 (timing) |
+| NFR-12, NFR-13 | SECURITY T11–T13 | `llm.test.js` (size limit before upload, cost guard), `server.test.js` | MT-11 |
 
 Items marked "real key required" are **not** verified by CI; they need the manual checks in the test plan.

@@ -24,11 +24,14 @@ Scope: the local Node server and web page in this repository. The supported depl
 | T8 | **Malicious or huge uploads.** | 15 MB cap; extension allow-list; parse errors become a generic 422; nothing is written to disk. | `server.test.js` |
 | T9 | **Crashing the server with one bad request.** | Handlers catch their own errors and a final guard answers 500 instead of letting a rejection kill the process; malformed URLs are rejected early. | `server.test.js` |
 | T10 | **Supply chain.** | Few direct dependencies; `package-lock.json` committed; CI runs `npm ci` and `npm audit --audit-level=high`. | CI |
+| T11 | **A recording leaks or lingers.** Recordings can be sensitive (internal meetings). | Sent only to Gemini; held in server memory just for the upload; deleted from Gemini on Clear, on starting a new recording and on tab close (`keepalive` request); Google expires files after 48 h regardless. The upload hint tells the user where it goes. | `llm.test.js` (delete), `server.test.js` |
+| T12 | **Server used to fetch arbitrary URLs / access other files** through the recording reference. | `fileUri` is accepted only if it is inside Gemini's own file store with a plain id (no `..`, extra path, other host); the MIME type comes from the file extension, not from the client. | `llm.test.js` (rejects foreign hosts, traversal, wrong types) |
+| T13 | **Unbounded cost from uploads or text-to-speech.** | 200 MB recording cap checked before upload; 15,000-character cap on audio briefings; every route is local-only (T1–T3). | `llm.test.js` |
 
 ## 3. Privacy
 
 - **Nothing is stored** by the server. Results live in the browser tab.
-- **Third parties.** Choosing the OpenAI engine sends the text to OpenAI; the evaluation sends the original and compressed text. Choosing Gemini video sends the YouTube URL and your questions to Google. The offline engine, uploads parsing, captions and read-aloud send nothing to model providers (captions are fetched from YouTube).
+- **Third parties.** Choosing the OpenAI engine sends the text to OpenAI; the evaluation sends the original and compressed text. Choosing Gemini video sends the YouTube URL and your questions to Google. Uploading a **meeting recording** sends the audio or video itself to Google (deleted on Clear or tab close, and expired by Google after 48 hours); creating an **audio briefing** sends the summary text to OpenAI. The offline engine, uploads parsing, captions and read-aloud send nothing to model providers (captions are fetched from YouTube).
 - **Gemini free tier:** Google's terms for the free tier allow using inputs and outputs to improve its products. Do not use it for confidential material.
 - Server logs print error objects for debugging; they do not print user text or keys.
 
@@ -38,6 +41,7 @@ Scope: the local Node server and web page in this repository. The supported depl
 |---|---|
 | No authentication or rate limiting | Accepted: loopback-only. Required before any public hosting. |
 | Models can still produce **wrong or incomplete summaries**, including claims not in the source | Mitigated, not eliminated: the evaluation lists unsupported claims, but it is itself an LLM. |
+| Recordings are buffered in memory (up to 200 MB) while uploading; several at once on a small machine could exhaust it | Accepted for single-user local use |
 | Document parsers (`unpdf`, `mammoth`, `exceljs`) process untrusted files in the server process; there is no decompression-size limit for Office files | Accepted for local use. Do not expose the server. |
 | `npm audit` reports moderate advisories via `exceljs` → `uuid` (< 11.1.1: missing buffer bounds check in v3/v5/v6 when a buffer is supplied) | Accepted for `uuid`: this project never passes a buffer to those functions. A second moderate advisory is reported for the transitive `minimatch` (< 11.0.1); it has **not** been assessed in depth. Revisit when `exceljs` updates, or replace `exceljs`. |
 | The unofficial caption package may change behaviour | Isolated to `/api/transcript`; failure shows a message. |

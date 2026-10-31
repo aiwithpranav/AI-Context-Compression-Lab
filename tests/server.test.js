@@ -200,6 +200,87 @@ test('a malformed URL gets a 400 and does not crash the server', async () => {
   assert.equal((await fetch(base + '/api/status')).status, 200, 'server is still alive');
 });
 
+// ─── Recordings and audio briefing ─────────────────────────────────────────
+
+const uploadMedia = (name, buf) => fetch(`${base}/api/media/upload?name=${encodeURIComponent(name)}`, { method: 'POST', body: buf });
+
+test('uploads a recording, summarises it, asks about it and deletes it', async () => {
+  const up = await uploadMedia('weekly-sync.mp3', Buffer.from('ID3 fake audio'));
+  assert.equal(up.status, 200);
+  const media = await up.json();
+  assert.equal(media.kind, 'audio');
+  assert.match(media.fileUri, /\/files\/fake\d+$/);
+
+  const ref = { fileUri: media.fileUri, mimeType: media.mimeType };
+  const summary = await (await postJson('/api/video/compress', { media: ref, kind: 'audio', mode: 'both', level: 'balanced' })).json();
+  assert.equal(summary.videoId, null);
+  assert.equal(summary.keyPoints[0].time, 65);
+
+  const answer = await (await postJson('/api/video/ask', { media: ref, question: 'What was decided?' })).json();
+  assert.ok(answer.answer);
+
+  const del = await postJson('/api/media/delete', { fileUri: media.fileUri });
+  assert.deepEqual(await del.json(), { deleted: true });
+});
+
+test('recording upload errors are clear', async () => {
+  const bad = await uploadMedia('notes.pdf', Buffer.from('x'));
+  assert.equal(bad.status, 422);
+  assert.match((await bad.json()).error, /Unsupported recording type/);
+
+  assert.equal((await uploadMedia('empty.mp3', Buffer.alloc(0))).status, 400);
+  assert.equal((await fetch(`${base}/api/media/upload?name=a.mp3`)).status, 405);
+});
+
+test('a recording reference that is not in the Gemini file store is refused', async () => {
+  const res = await postJson('/api/video/ask', { media: { fileUri: 'https://evil.example.com/v1beta/files/abc', mimeType: 'audio/mpeg' }, question: 'hi' });
+  assert.equal(res.status, 400);
+  assert.equal((await postJson('/api/media/delete', { fileUri: 'https://evil.example.com/x' })).status, 400);
+});
+
+test('recording upload needs the Gemini key', async () => {
+  const saved = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const res = await uploadMedia('a.mp3', Buffer.from('x'));
+    assert.equal(res.status, 503);
+    assert.match((await res.json()).error, /GEMINI_API_KEY/);
+  } finally {
+    process.env.GEMINI_API_KEY = saved;
+  }
+});
+
+test('another website cannot upload to the server (Origin check)', async () => {
+  const host = `127.0.0.1:${server.address().port}`;
+  assert.equal(await rawRequest({ Host: host, Origin: 'https://evil.example.com' }, '/api/media/upload?name=a.mp3', 'POST'), 403);
+  assert.equal(await rawRequest({ Host: host, Origin: 'https://evil.example.com' }, '/api/tts', 'POST'), 403);
+});
+
+test('POST /api/tts returns an MP3', async () => {
+  const res = await postJson('/api/tts', { text: 'Summary. Short rewritten summary. Key points. 1. Point A.' });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'audio/mpeg');
+  const bytes = Buffer.from(await res.arrayBuffer());
+  assert.equal(bytes.subarray(0, 3).toString(), 'ID3');
+  assert.equal(Number(res.headers.get('content-length')), bytes.length);
+});
+
+test('POST /api/tts validates input and needs JSON and the OpenAI key', async () => {
+  assert.equal((await postJson('/api/tts', { text: '' })).status, 400);
+  assert.equal((await fetch(base + '/api/tts', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' })).status, 415);
+  assert.equal((await fetch(base + '/api/tts')).status, 405);
+
+  const saved = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const res = await postJson('/api/tts', { text: 'hello there' });
+    assert.equal(res.status, 503);
+    assert.match((await res.json()).error, /OPENAI_API_KEY/);
+  } finally {
+    process.env.OPENAI_API_KEY = saved;
+  }
+});
+
 // ─── YouTube caption time units (regression: a 59-second video showed hours) ─
 
 test('caption times in milliseconds are converted, even for a short video', () => {

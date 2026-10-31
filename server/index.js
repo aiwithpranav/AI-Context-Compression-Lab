@@ -8,8 +8,11 @@
  *   POST /api/compress              → OpenAI summary / key points / action items for text
  *   POST /api/tokens                → exact token counts (local tokenizer)
  *   POST /api/evaluate              → QA-based information-preservation score
- *   POST /api/video/compress        → Gemini summary of a YouTube video (watches it, no captions needed)
- *   POST /api/video/ask             → Gemini answer to a question about the video
+ *   POST /api/video/compress        → Gemini summary of a YouTube video or an uploaded recording
+ *   POST /api/video/ask             → Gemini answer to a question about it
+ *   POST /api/media/upload?name=    → upload a meeting recording (audio/video, raw bytes) to Gemini
+ *   POST /api/media/delete          → delete an uploaded recording from Gemini
+ *   POST /api/tts                   → MP3 of a text (OpenAI text-to-speech), for listening on the go
  *
  * The browser cannot fetch YouTube captions (CORS), parse office files, or be
  * trusted with API keys, so those live here. The offline extractive engine,
@@ -24,6 +27,7 @@ import { YoutubeTranscript } from 'youtube-transcript';
 import * as llm from './llm.js';
 import { extractFromFile, ExtractError } from './extract.js';
 import { extractVideoId } from './youtube.js';
+import { MAX_MEDIA_BYTES } from './prompts.js';
 
 // Repository layout: public/ is everything the browser may load; server/ never is.
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,7 +37,7 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 // Real environment variables win.
 try { process.loadEnvFile(path.join(ROOT, '.env')); } catch { /* no .env — fine */ }
 const MAX_JSON_BYTES = 3_000_000;    // ~500k chars of text plus JSON overhead
-const MAX_UPLOAD_BYTES = 15_000_000;
+const MAX_UPLOAD_BYTES = 15_000_000;    // documents (recordings: MAX_MEDIA_BYTES, 200 MB)
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -179,11 +183,15 @@ const JSON_ROUTES = {
   },
   '/api/video/compress': async (body) => {
     checkModeAndLevel(body);
-    return llm.videoCompress({ url: body.url, mode: body.mode, level: body.level });
+    return llm.videoCompress({
+      url: body.url, media: body.media, kind: body.kind === 'audio' ? 'audio' : 'video',
+      mode: body.mode, level: body.level,
+    });
   },
   '/api/video/ask': async (body) => {
-    return llm.videoAsk({ url: body.url, question: body.question, history: body.history });
+    return llm.videoAsk({ url: body.url, media: body.media, question: body.question, history: body.history });
   },
+  '/api/media/delete': async (body) => llm.deleteMedia({ fileUri: body.fileUri }),
 };
 
 async function handleJsonRoute(route, req, res) {
@@ -207,6 +215,35 @@ async function handleExtract(url, req, res) {
     if (err instanceof ExtractError) return sendJson(res, 422, { error: err.message });
     if (err instanceof LlmError) return sendJson(res, err.httpStatus, { error: err.message });
     console.error('[extract]', err);
+    sendJson(res, 500, { error: 'Unexpected server error.' });
+  }
+}
+
+/** Raw-bytes upload of a meeting recording; the file is sent on to Gemini and not kept here. */
+async function handleMediaUpload(url, req, res) {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'Use POST.' });
+  try {
+    const buffer = await readBody(req, MAX_MEDIA_BYTES);
+    if (buffer.length === 0) throw new LlmError('The file is empty.', 400);
+    sendJson(res, 200, await llm.uploadMedia({ buffer, filename: url.searchParams.get('name') || '' }));
+  } catch (err) {
+    if (err instanceof LlmError) return sendJson(res, err.httpStatus, { error: err.message });
+    console.error('[media]', err);
+    sendJson(res, 500, { error: 'Unexpected server error.' });
+  }
+}
+
+/** Text in, MP3 out. */
+async function handleTts(req, res) {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'Use POST.' });
+  try {
+    const { text } = await readJson(req);
+    const mp3 = await llm.textToSpeech({ text });
+    res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Content-Length': mp3.length, 'Cache-Control': 'no-store' });
+    res.end(mp3);
+  } catch (err) {
+    if (err instanceof LlmError) return sendJson(res, err.httpStatus, { error: err.message });
+    console.error('[tts]', err);
     sendJson(res, 500, { error: 'Unexpected server error.' });
   }
 }
@@ -250,6 +287,8 @@ export function createServer() {
     if (url.pathname === '/api/status') return sendJson(res, 200, llm.status());
     if (url.pathname === '/api/transcript') return run(() => handleTranscript(url, res));
     if (url.pathname === '/api/extract') return run(() => handleExtract(url, req, res));
+    if (url.pathname === '/api/media/upload') return run(() => handleMediaUpload(url, req, res));
+    if (url.pathname === '/api/tts') return run(() => handleTts(req, res));
     if (JSON_ROUTES[url.pathname]) return run(() => handleJsonRoute(JSON_ROUTES[url.pathname], req, res));
     run(() => handleStatic(url, res));
   });

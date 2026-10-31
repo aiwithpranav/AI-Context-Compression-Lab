@@ -22,9 +22,10 @@ LLMs read **tokens**, and every model has a **context window**. Long documents, 
 | **YouTube link** | **Gemini watches the video** (speech and what's on screen) — no captions needed. You get a summary, timestamped key points (each links to that moment) and action items. Then **ask it questions** about the video. |
 | **PDF · Word · Excel · CSV** | Text is extracted on the server, then compressed like pasted text. Spreadsheets become readable rows. |
 | **Meeting transcripts** (`.vtt` / `.srt` from Zoom, Meet, Teams) or `.txt` | Timestamped key points and a Decisions & Action Items list. |
+| **Meeting recording** (`.mp3` `.m4a` `.wav` `.mp4` `.mov` `.webm`, ≤ 200 MB) | Gemini **listens** and returns a summary, key points and action items with timestamps; ask it questions. Zoom and Google Meet **links** are private, so download the recording and upload the file (or upload the `.vtt` transcript). The file is deleted from Gemini on Clear or tab close. |
 | **Captions only** | Alternative to Gemini for a YouTube link: loads the caption track as text, so it works with any engine, including offline. |
 
-Also: **Listen** (reads the summary aloud), **exact token counts**, an **Engine Comparison** table, and an **LLM evaluation** ("Did the meaning survive?").
+Also: **Listen on the go** — an **MP3 audio briefing** (summary, key points, action items) made with OpenAI text-to-speech, to play or download and listen to on a phone, for example while driving; **Listen** (free browser voice, reads the summary aloud), **exact token counts**, an **Engine Comparison** table, and an **LLM evaluation** ("Did the meaning survive?").
 
 ---
 
@@ -34,6 +35,7 @@ Also: **Listen** (reads the summary aloud), **exact token counts**, an **Engine 
 |---|---|---|
 | Text compression, evaluation | **OpenAI** (`gpt-4o-mini` by default) | Strict JSON-schema output. Set `OPENAI_MODEL` for another model. |
 | YouTube video summary + questions | **Gemini** (`gemini-flash-lite-latest` first, with automatic fallback) | Gemini accepts a YouTube URL directly as input, and has a free tier. Speed-first: see below. |
+| Audio briefing (MP3) | **OpenAI** text-to-speech (`gpt-4o-mini-tts` by default) | Real audio file that keeps playing with the phone locked; browser voices do not. Costs a fraction of a cent per briefing. |
 | Token counts | OpenAI's tokenizer, **locally** | Exact, free, needs no key. For videos, Gemini's own token counts. |
 | Offline baseline | TF-IDF extractive | No key, no network. Can't rewrite or hallucinate. |
 
@@ -95,7 +97,7 @@ Open <http://localhost:3000>.
 
 Both are optional. **Without any key** you still get the offline engine, document upload, transcripts, captions, exact token counts and Listen — the LLM options are greyed out with the reason. Opening `public/index.html` directly (no server) gives the offline engine and subtitle/text files only.
 
-Optional: `OPENAI_MODEL`, `GEMINI_MODEL` (pins one model and turns off the fallback; default is speed-first with fallback), `PORT`, `HOST` (default `127.0.0.1`), `ALLOWED_HOSTS` (extra hostnames, e.g. behind a reverse proxy).
+Optional: `OPENAI_MODEL`, `OPENAI_TTS_MODEL`, `GEMINI_MODEL` (pins one model and turns off the fallback; default is speed-first with fallback), `PORT`, `HOST` (default `127.0.0.1`), `ALLOWED_HOSTS` (extra hostnames, e.g. behind a reverse proxy).
 
 **Gemini speed:** measured with a real free-tier key (Oct 2026): a 19-second video took about 6 s and a 14-minute talk about 27 s on `gemini-flash-lite-latest`; the newest flash model answered "high demand" and took 190 s. Speed varies with Google's load. For higher quality at lower speed, set `GEMINI_MODEL=gemini-flash-latest`.
 
@@ -107,7 +109,7 @@ Optional: `OPENAI_MODEL`, `GEMINI_MODEL` (pins one model and turns off the fallb
 npm test
 ```
 
-72 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
+95 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
 
 ---
 
@@ -141,6 +143,7 @@ npm test
 ## Design decisions and limitations
 
 - **Keys stay on the server, and the server stays local.** It listens on `127.0.0.1` only and rejects foreign `Host` / `Origin` headers and non-JSON posts, so other devices and other websites can't spend your keys. It has no login or rate limiting — don't expose it publicly. Uploads are processed in memory and not stored. Details: [docs/SECURITY.md](docs/SECURITY.md).
+- **Recordings:** speech recognition mishears names (a test heard "Meera" as "Neira"), and Gemini does not label speakers, so check action-item owners. Recordings are buffered in memory while uploading (≤ 200 MB); export long video meetings as audio first. Recordings go to Google, briefing text to OpenAI.
 - **Videos have no source text**, so keyword coverage and the QA evaluation don't apply to them; stats use Gemini's token counts (the "original" is the video's token count, which depends on video length and resolution — requests use low frame resolution to save tokens).
 - **Gemini is only partly field-verified.** Video summaries were run against real videos, and the maintainer confirmed a real question-and-answer round; unanswerable questions and long multi-turn chats have not been checked. The free-tier models, YouTube-URL support and field names change; the model is chosen speed-first (the newest model is often overloaded) and falls through to the next candidate on 503/404/429/timeouts, and the schema falls back to plain JSON. Very long videos may hit free-tier token limits.
 - **The evaluator is an LLM too.** It can be biased toward its own phrasing, and 8 questions is a small sample — a useful signal, not ground truth. Evaluation costs 3 calls, with the full original text sent twice.

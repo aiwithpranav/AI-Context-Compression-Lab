@@ -46,10 +46,18 @@ const UI = (() => {
       btnListenSummary:      document.getElementById('btn-listen-summary'),
       btnListenKeyPoints:    document.getElementById('btn-listen-keypoints'),
 
+      // Audio briefing card
+      audioCard:             document.getElementById('audio-card'),
+      btnMakeAudio:          document.getElementById('btn-make-audio'),
+      audioStatus:           document.getElementById('audio-status'),
+      audioPlayer:           document.getElementById('audio-player'),
+      audioDownload:         document.getElementById('audio-download'),
+
       // Video chat card
       chatCard:              document.getElementById('video-chat-card'),
       chatLog:               document.getElementById('video-chat-log'),
       chatInput:             document.getElementById('video-chat-input'),
+      chatHeading:           document.getElementById('video-chat-heading'),
       btnChatAsk:            document.getElementById('btn-video-ask'),
 
       // Comparison + LLM evaluation cards
@@ -106,6 +114,7 @@ const UI = (() => {
     extractive: { label: 'Compressing locally...',  sub: 'Ranking sentences with TF-IDF' },
     llm:        { label: 'Asking OpenAI...',        sub: 'Rewriting your text in its own words' },
     video:      { label: 'Gemini is watching the video...', sub: 'Longer videos can take a minute or two' },
+    recording:  { label: 'Gemini is listening to the recording...', sub: 'Long meetings can take a few minutes' },
   };
 
   function showProcessing(engine = 'extractive') {
@@ -199,6 +208,10 @@ const UI = (() => {
     // — LLM evaluation card (needs the original text, so not for videos) —
     _resetEvaluation();
     if (_evalAvailable && results.originalText) _showCard(els.evalCard); else _hideCard(els.evalCard);
+
+    // — Audio briefing (any result; needs the OpenAI key) —
+    resetAudio();
+    _showCard(els.audioCard);
 
     // — Ask-about-the-video chat (Gemini results only) —
     if (results.engine === 'video') _showCard(els.chatCard); else _hideCard(els.chatCard);
@@ -451,6 +464,59 @@ const UI = (() => {
     els.evalResult.appendChild(faith);
   }
 
+  // ─── Audio briefing ──────────────────────────────────────────────────────
+
+  let _audioAvailable = false;
+  let _audioUnavailableReason = '';
+  let _audioUrl = null;
+
+  function setAudioAvailable(available, reason) {
+    _audioAvailable = available;
+    _audioUnavailableReason = reason || '';
+  }
+
+  function _revokeAudio() {
+    if (_audioUrl) { URL.revokeObjectURL(_audioUrl); _audioUrl = null; }
+  }
+
+  /** Reset the card for a new result: hide the player, enable or disable the button. */
+  function resetAudio() {
+    _revokeAudio();
+    if (els.audioPlayer) { els.audioPlayer.pause(); els.audioPlayer.removeAttribute('src'); els.audioPlayer.classList.add('hidden'); }
+    if (els.audioDownload) els.audioDownload.classList.add('hidden');
+    if (els.btnMakeAudio) els.btnMakeAudio.disabled = !_audioAvailable;
+    if (els.audioStatus) {
+      els.audioStatus.classList.remove('source-status--error');
+      els.audioStatus.textContent = _audioAvailable ? '' : _audioUnavailableReason;
+    }
+  }
+
+  function setAudioBusy(busy) {
+    if (els.btnMakeAudio) els.btnMakeAudio.disabled = busy || !_audioAvailable;
+    if (els.audioStatus) {
+      els.audioStatus.classList.remove('source-status--error');
+      els.audioStatus.textContent = busy ? 'Creating the audio… this takes a few seconds.' : els.audioStatus.textContent;
+    }
+  }
+
+  function showAudio(blob, filename) {
+    _revokeAudio();
+    _audioUrl = URL.createObjectURL(blob);
+    els.audioPlayer.src = _audioUrl;
+    els.audioPlayer.classList.remove('hidden');
+    els.audioDownload.href = _audioUrl;
+    els.audioDownload.download = filename;
+    els.audioDownload.classList.remove('hidden');
+    els.audioStatus.textContent = 'Ready. Press play, or download the MP3 to listen on your phone.';
+    els.audioPlayer.play().catch(() => { /* autoplay may be blocked; the controls still work */ });
+  }
+
+  function showAudioError(message) {
+    if (!els.audioStatus) return;
+    els.audioStatus.classList.add('source-status--error');
+    els.audioStatus.textContent = message;
+  }
+
   // ─── Ask About The Video (chat) ──────────────────────────────────────────
 
   const CHAT_SUGGESTIONS = [
@@ -463,7 +529,8 @@ const UI = (() => {
   function onChatSuggestion(fn) { _onChatSuggestion = fn; }
 
   /** Start a fresh conversation for a newly summarised video. */
-  function resetVideoChat() {
+  function resetVideoChat(videoId, kind = 'video') {
+    if (els.chatHeading) els.chatHeading.textContent = kind === 'recording' ? 'Ask about this recording' : 'Ask about this video';
     if (!els.chatLog) return;
     els.chatLog.innerHTML = '';
     const row = document.createElement('div');
@@ -674,7 +741,7 @@ const UI = (() => {
   }
 
   function _hideAllResultCards() {
-    [els.summaryCard, els.keypointsCard, els.actionsCard, els.compareCard, els.evalCard, els.chatCard, els.analyticsCard, els.preservationCard, els.memoryCard]
+    [els.summaryCard, els.keypointsCard, els.actionsCard, els.compareCard, els.evalCard, els.audioCard, els.chatCard, els.analyticsCard, els.preservationCard, els.memoryCard]
       .forEach(card => {
         if (card) {
           card.classList.add('hidden');
@@ -776,6 +843,11 @@ const UI = (() => {
     hideProcessing,
     renderResults,
     renderComparison,
+    setAudioAvailable,
+    resetAudio,
+    setAudioBusy,
+    showAudio,
+    showAudioError,
     resetVideoChat,
     appendChatMessage,
     setChatBusy,

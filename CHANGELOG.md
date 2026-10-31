@@ -15,7 +15,10 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - **LLM evaluation** ("Did the meaning survive?"): question-answering test plus unsupported-claim detection (FR-5, ADR-0005) and an **engine comparison** table (FR-6).
 - **Listen**: read the summary or key points aloud (FR-12).
 - Node server (`server/index.js`) holding API keys, fetching captions and parsing uploads (ADR-0001).
-- 72 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
+- 95 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
+
+- **Meeting recordings**: upload an MP3, M4A, WAV, MP4, MOV or WEBM (up to 200 MB); Gemini listens, then returns a summary, key points and action items with timestamps, and answers questions about it. The uploaded file is deleted on Clear or tab close (FR-15, ADR-0008).
+- **Audio briefing**: create an MP3 of the summary, key points and action items with OpenAI text-to-speech; play it or download it to listen on a phone, for example while driving (FR-16, ADR-0008).
 
 ### Changed
 - Project layout: browser files moved to `public/` (the only directory the server serves) and the server entry point to `server/index.js`.
@@ -26,6 +29,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Results show token counts without `~` when exact, and dashes instead of invented numbers when a value is unknown.
 
 ### Fixed
+- Questions about a recording could be answered in another language (a real test answered an English question in Korean); the answer prompt now pins the question's language.
 - Video summaries could take minutes: the newest Gemini model was auto-picked and was overloaded (190 s for a 19-second video). The default is now speed-first with automatic fallback to the next model on 503/404/429/timeouts, and a 150 s timeout per attempt. Measured afterwards: 19-second video ≈ 6 s, 14-minute talk ≈ 27 s.
 - A 59-second video was shown as hours long: caption times in milliseconds were read as seconds. The unit is now chosen from the median caption duration.
 - Key points mapped to the wrong source sentence when two sentences were identical.
@@ -42,6 +46,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Only front-end files are served; `.env` is git-ignored. See `docs/SECURITY.md`.
 
 ### Known issues
-- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries, a video question-and-answer round and the OpenAI text flow. Not yet: the LLM evaluation (MT-3) and the unanswerable-question and multi-turn parts of MT-7 (`docs/TEST_PLAN.md`).
+- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries, video and recording question-and-answer (including unanswerable and Marathi questions), recording upload and delete, MP3 briefings, and the OpenAI text flow. Not yet: the LLM evaluation (MT-3), a long Zoom/Meet MP4, and listening on a phone with the screen locked (`docs/TEST_PLAN.md`).
+- Speech recognition can mishear names (a test heard "Meera" as "Neira"); check action-item owners.
 - `npm audit` reports moderate advisories via `exceljs` → `uuid`; the affected code path is not used (see `docs/SECURITY.md`).
 - No license file yet; `package.json` declares ISC by default and the owner should confirm.

@@ -92,13 +92,58 @@ const LLMClient = (() => {
    * @returns {Promise<{ videoId: string, summary: string|null, keyPoints: {text,time}[]|null,
    *   actions: {text,time}[], memoryTrick: object, tokens: {original,compressed}, model: string }>}
    */
-  function videoCompress({ url, mode, level }) {
-    return _post('/api/video/compress', { url, mode, level });
+  function videoCompress({ url, media, kind, mode, level }) {
+    return _post('/api/video/compress', { url, media, kind, mode, level });
   }
 
   /** history: [{ role: 'user'|'model', text }] */
-  function videoAsk({ url, question, history }) {
-    return _post('/api/video/ask', { url, question, history });
+  function videoAsk({ url, media, question, history }) {
+    return _post('/api/video/ask', { url, media, question, history });
+  }
+
+  // ─── Recordings (Gemini) ─────────────────────────────────────────────────
+
+  /** Upload a meeting recording. Resolves to { fileUri, mimeType, kind: 'audio'|'video' }. */
+  function mediaUpload(file) {
+    return _send('/api/media/upload?name=' + encodeURIComponent(file.name), { method: 'POST', body: file });
+  }
+
+  /** Ask the server to delete an uploaded recording. Never throws. */
+  function mediaDelete(fileUri) {
+    return _post('/api/media/delete', { fileUri }).catch(() => null);
+  }
+
+  /** Same, but survives the page being closed. */
+  function mediaDeleteOnExit(fileUri) {
+    try {
+      fetch('/api/media/delete', {
+        method: 'POST', keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileUri }),
+      });
+    } catch { /* nothing more to do */ }
+  }
+
+  // ─── Audio briefing (OpenAI text-to-speech) ──────────────────────────────
+
+  /** Resolves to an MP3 Blob. */
+  async function tts(text) {
+    let res;
+    try {
+      res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+    } catch {
+      throw new Error('Cannot reach the server. Start it with "npm start".');
+    }
+    if (!res.ok) {
+      let data = null;
+      try { data = await res.json(); } catch { /* not JSON */ }
+      throw new Error((data && data.error) || `Server error (${res.status}).`);
+    }
+    return res.blob();
   }
 
   // ─── Documents ───────────────────────────────────────────────────────────
@@ -113,6 +158,7 @@ const LLMClient = (() => {
     textUnavailableReason, videoUnavailableReason,
     compress, countTokens, evaluate,
     videoCompress, videoAsk,
+    mediaUpload, mediaDelete, mediaDeleteOnExit, tts,
     extractFile,
   };
 

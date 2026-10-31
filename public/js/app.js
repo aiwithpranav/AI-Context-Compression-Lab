@@ -12,7 +12,8 @@
   // Results of each engine for the current input, for the comparison card.
   let _comparison = { text: null, rows: {} };
 
-  // A YouTube video that Gemini has summarised: { url, videoId, history }.
+  // A YouTube video or an uploaded recording that Gemini has summarised:
+  // { url } or { media: { fileUri, mimeType }, kind }, plus { videoId, history }.
   // While set (and the text box is empty), the compress buttons re-run it.
   let _activeVideo = null;
 
@@ -27,7 +28,7 @@
 
     // A Gemini video is active and nothing was typed: compress the video again.
     if (_activeVideo && !text) {
-      await runVideoCompression(mode, _activeVideo.url);
+      await runVideoCompression(mode, _activeVideo);
       return;
     }
 
@@ -187,6 +188,7 @@
         : `OpenAI (${status.text.model}) rewrites the text in its own words. Token counts are exact either way.`;
     }
     UI.setEvaluationAvailable(!textReason);
+    UI.setAudioAvailable(!textReason, textReason);
 
     const videoHint = document.getElementById('video-hint');
     const videoReason = LLMClient.videoUnavailableReason();
@@ -222,15 +224,16 @@
    * items. There is no source text, so the keyword-based metrics and the QA
    * evaluation don't apply; token counts come from Gemini's own tokenizer.
    */
-  async function runVideoCompression(mode, url) {
+  async function runVideoCompression(mode, source) {
     const level = _getSelectedLevel();
+    const isRecording = Boolean(source.media);
     AppState.setMode(mode);
-    AppState.startProcessing('video');
+    AppState.startProcessing(isRecording ? 'recording' : 'video');
     await _nextFrame();
 
     try {
-      const r = await LLMClient.videoCompress({ url, mode, level });
-      _activeVideo = { url, videoId: r.videoId, history: [] };
+      const r = await LLMClient.videoCompress({ url: source.url, media: source.media, kind: source.kind, mode, level });
+      _activeVideo = { url: source.url, media: source.media, kind: source.kind, videoId: r.videoId, history: [] };
 
       const keyPoints = r.keyPoints ? r.keyPoints.map(p => p.text) : null;
       const compressedText = _joinCompressed(r.summary, keyPoints);
@@ -257,7 +260,7 @@
         originalText: null,
         compressedText,
       });
-      UI.resetVideoChat(r.videoId);
+      UI.resetVideoChat(r.videoId, isRecording ? 'recording' : 'video');
     } catch (err) {
       console.error('[app.js] Video error:', err);
       AppState.setError(err && err.message ? err.message : 'Could not process this video.');
@@ -266,7 +269,7 @@
 
   async function _askAboutVideo(question) {
     if (!_activeVideo) {
-      UI.appendChatMessage('error', 'Summarize a video first, then ask about it.');
+      UI.appendChatMessage('error', 'Summarize a video or recording first, then ask about it.');
       return;
     }
     UI.appendChatMessage('user', question);
@@ -274,6 +277,7 @@
     try {
       const { answer } = await LLMClient.videoAsk({
         url: _activeVideo.url,
+        media: _activeVideo.media,
         question,
         history: _activeVideo.history,
       });
@@ -283,6 +287,42 @@
       UI.appendChatMessage('error', err.message);
     } finally {
       UI.setChatBusy(false);
+    }
+  }
+
+  /** Delete the uploaded recording (if any) from Gemini and forget it. */
+  async function _discardRecording() {
+    const media = _activeVideo && _activeVideo.media;
+    _activeVideo = null;
+    if (media) await LLMClient.mediaDelete(media.fileUri);
+  }
+
+  // ─── Audio briefing (listen on the go) ────────────────────────────────────
+
+  /** The text that gets spoken: summary, then key points, then action items. */
+  function _briefingText(results) {
+    const parts = [];
+    if (results.summary) parts.push('Summary. ' + results.summary);
+    if (results.keyPoints && results.keyPoints.length > 0) {
+      parts.push('Key points. ' + results.keyPoints.map((p, i) => `${i + 1}. ${p}`).join(' '));
+    }
+    if (results.actions && results.actions.length > 0) {
+      parts.push('Decisions and action items. ' + results.actions.map((a, i) => `${i + 1}. ${a.text}`).join(' '));
+    }
+    return parts.join('\n\n');
+  }
+
+  async function _makeAudio() {
+    const results = AppState.get('results');
+    if (!results) return;
+    UI.setAudioBusy(true);
+    try {
+      const blob = await LLMClient.tts(_briefingText(results));
+      UI.showAudio(blob, `briefing-${new Date().toISOString().slice(0, 10)}.mp3`);
+    } catch (err) {
+      UI.showAudioError(err.message);
+    } finally {
+      UI.setAudioBusy(false);
     }
   }
 
@@ -344,6 +384,32 @@
            'Choose a compression level and press a button below.';
   }
 
+  /** Upload a meeting recording to Gemini, then summarise it like a video. */
+  async function _summarizeRecording(file) {
+    const MAX_MB = 200;
+    if (file.size > MAX_MB * 1024 * 1024) {
+      _setStatus(`That file is ${(file.size / 1024 / 1024).toFixed(0)} MB; the limit is ${MAX_MB} MB. Export the audio only, or trim the recording.`, true);
+      return;
+    }
+    const reason = LLMClient.videoUnavailableReason();
+    if (reason) { _setStatus(reason, true); return; }
+
+    await _discardRecording();
+    Transcript.reset();
+    document.getElementById('input-textarea').value = '';
+    AppState.setInputText('');
+    UI.updateLiveStats('');
+
+    _setStatus(`Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)… large recordings can take a few minutes.`);
+    try {
+      const media = await LLMClient.mediaUpload(file);
+      _setStatus(`✓ ${file.name} uploaded. Gemini is analysing it…`);
+      await runVideoCompression('both', { media: { fileUri: media.fileUri, mimeType: media.mimeType }, kind: media.kind });
+    } catch (err) {
+      _setStatus(err.message, true);
+    }
+  }
+
   function _wireSources() {
     const tabs   = document.querySelectorAll('.source-tab');
     const panels = {
@@ -395,7 +461,8 @@
       UI.updateLiveStats('');
       Transcript.reset();
       btnGemini.disabled = true;
-      await runVideoCompression('both', url);
+      await _discardRecording();
+      await runVideoCompression('both', { url });
       btnGemini.disabled = false;
     };
     btnGemini.addEventListener('click', summarizeVideo);
@@ -405,15 +472,20 @@
     // subtitles and plain text are read right here in the browser.
     const SERVER_PARSED = ['pdf', 'docx', 'xlsx', 'csv'];
     const LOCAL_TEXT = ['txt', 'vtt', 'srt'];
+    const RECORDINGS = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'mp4', 'mov', 'webm', 'mpeg', 'mpg', 'avi', 'wmv', '3gp'];
     document.getElementById('transcript-file').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       const ext = file.name.split('.').pop().toLowerCase();
+      if (RECORDINGS.includes(ext)) {
+        await _summarizeRecording(file);
+        return;
+      }
       if (!SERVER_PARSED.includes(ext) && !LOCAL_TEXT.includes(ext)) {
         const legacy = { doc: '.docx', xls: '.xlsx' }[ext];
         _setStatus(legacy
           ? `Old .${ext} files aren't supported. Save it as ${legacy} and upload again.`
-          : `Unsupported file type ".${ext}". Use PDF, DOCX, XLSX, CSV, VTT, SRT or TXT.`, true);
+          : `Unsupported file type ".${ext}". Use a document (PDF, DOCX, XLSX, CSV, TXT), a transcript (VTT, SRT) or a recording (MP3, M4A, WAV, MP4, MOV, WEBM).`, true);
         return;
       }
       try {
@@ -446,7 +518,7 @@
     // Clear wipes the loaded transcript and any status
     AppState.on('clear', () => {
       Transcript.reset();
-      _activeVideo = null;
+      _discardRecording();
       _setStatus('');
       urlInput.value = '';
       document.getElementById('transcript-file').value = '';
@@ -464,7 +536,14 @@
     AppState.on('clear', () => { _comparison = { text: null, rows: {} }; });
 
     // Typing or loading other text ends "video mode"
-    document.getElementById('input-textarea')?.addEventListener('input', () => { _activeVideo = null; });
+    document.getElementById('input-textarea')?.addEventListener('input', () => { _discardRecording(); });
+
+    // Closing the tab deletes an uploaded recording from Gemini right away.
+    window.addEventListener('pagehide', () => {
+      if (_activeVideo && _activeVideo.media) LLMClient.mediaDeleteOnExit(_activeVideo.media.fileUri);
+    });
+
+    document.getElementById('btn-make-audio')?.addEventListener('click', _makeAudio);
 
     // Ask-about-the-video chat
     document.getElementById('video-chat-form')?.addEventListener('submit', (e) => {

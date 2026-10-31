@@ -143,11 +143,14 @@
         <div id="source-file" class="source-panel hidden">
           <div class="source-row">
             <input id="transcript-file" class="source-input" type="file"
-              accept=".vtt,.srt,.txt,.pdf,.docx,.xlsx,.csv"
-              aria-label="Document: PDF, Word, Excel, CSV, transcript or text" />
+              accept=".vtt,.srt,.txt,.pdf,.docx,.xlsx,.csv,.mp3,.m4a,.wav,.aac,.ogg,.flac,.mp4,.mov,.webm,.mpeg,.mpg,.avi,.wmv,.3gp"
+              aria-label="Document, transcript or meeting recording" />
           </div>
-          <p class="source-hint">PDF, Word (.docx), Excel (.xlsx), CSV, meeting transcripts (.vtt / .srt from Zoom,
-            Meet, Teams) or plain .txt. Scanned PDFs (images) and old .doc / .xls files are not supported.</p>
+          <p class="source-hint">Documents: PDF, Word (.docx), Excel (.xlsx), CSV or .txt. Meeting transcripts:
+            .vtt / .srt from Zoom, Meet or Teams. <strong>Meeting recordings:</strong> .mp3, .m4a, .wav, .mp4, .mov,
+            .webm (up to 200 MB) — Gemini listens to it, summarises it and answers questions. Zoom and Google Meet
+            links are private, so download the recording first and upload the file here. Scanned PDFs and old
+            .doc / .xls files are not supported.</p>
         </div>
 
         <p id="source-status" class="source-status hidden" role="status" aria-live="polite"></p>
@@ -504,6 +507,27 @@
               <button id="btn-evaluate" class="btn btn-primary" type="button">Run evaluation</button>
               <p id="eval-status" class="source-hint" role="status" aria-live="polite"></p>
               <div id="eval-result"></div>
+            </div>
+          </article>
+
+          <!-- ── Audio Briefing (listen on the go) ── -->
+          <article id="audio-card" class="result-card result-card--wide hidden" aria-labelledby="audio-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon" aria-hidden="true">🎧</div>
+                <h3 id="audio-heading" class="card-title">Listen on the go</h3>
+              </div>
+              <div class="card-badge card-badge--green">MP3</div>
+            </div>
+            <div class="card-body">
+              <p class="preservation-subtitle">Turns the summary, key points and action items into an audio file you can
+                play here or download to your phone — for example to listen while driving. Uses OpenAI text-to-speech
+                (a fraction of a cent per briefing). The <em>Listen</em> buttons above are free but stop when the phone
+                screen locks.</p>
+              <button id="btn-make-audio" class="btn btn-primary" type="button">Create audio (MP3)</button>
+              <p id="audio-status" class="source-hint" role="status" aria-live="polite"></p>
+              <audio id="audio-player" class="audio-player hidden" controls preload="none"></audio>
+              <a id="audio-download" class="btn btn-secondary hidden" download="briefing.mp3">Download MP3</a>
             </div>
           </article>
 

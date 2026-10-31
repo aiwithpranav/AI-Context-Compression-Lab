@@ -7,9 +7,14 @@ import http from 'node:http';
 
 function listen(handler) {
   const server = http.createServer((req, res) => {
-    let raw = '';
-    req.on('data', c => raw += c);
-    req.on('end', () => handler(req, res, raw ? JSON.parse(raw) : {}));
+    const parts = [];
+    req.on('data', c => parts.push(c));
+    req.on('end', () => {
+      const bytes = Buffer.concat(parts);
+      let body = {};
+      try { body = bytes.length ? JSON.parse(bytes.toString('utf8')) : {}; } catch { /* binary upload */ }
+      handler(req, res, body, bytes);
+    });
   });
   return new Promise(resolve => server.listen(0, () => resolve(server)));
 }
@@ -17,7 +22,7 @@ function listen(handler) {
 /** What a model "says" for each kind of prompt the app sends. */
 function answerFor(system, schema) {
   const required = schema?.required || [];
-  if (system.includes('compress') || system.includes('summarise a video')) {
+  if (system.includes('compress') || system.includes('You summarise')) {
     const out = {};
     if (required.includes('summary')) out.summary = 'Short rewritten summary.';
     const video = JSON.stringify(schema).includes('"time"');
@@ -48,6 +53,13 @@ export async function fakeOpenAI() {
   let failure = null;
   const server = await listen((req, res, body) => {
     requests.push({ path: req.url, body });
+
+    // Text-to-speech: answer with fake "MP3" bytes that echo the input length.
+    if (req.url.endsWith('/audio/speech')) {
+      res.setHeader('content-type', 'audio/mpeg');
+      return res.end(Buffer.concat([Buffer.from('ID3'), Buffer.from(`[${body.input.length} chars, voice ${body.voice}]`)]));
+    }
+
     res.setHeader('content-type', 'application/json');
     if (failure && failure.times > 0) {
       failure.times--;
@@ -74,17 +86,42 @@ export async function fakeOpenAI() {
 /**
  * `rejectSchemaOnce` makes the first generateContent call fail with a schema
  * error, to exercise the plain-JSON retry.
+ * `processingPolls` makes an uploaded file report PROCESSING for that many status checks first.
  * `failModels` maps a model id to an HTTP status it always answers with
  * (e.g. { 'gemini-flash-lite-latest': 503 }), to exercise the model fallback.
  */
-export async function fakeGemini({ rejectSchemaOnce = false, failModels = {} } = {}) {
+export async function fakeGemini({ rejectSchemaOnce = false, failModels = {}, processingPolls = 0 } = {}) {
   const requests = [];
+  const files = new Map();      // id -> { state, polls }
+  let nextFile = 1;
   let rejected = false;
   let failure = null;
-  const server = await listen((req, res, body) => {
-    requests.push({ path: req.url, method: req.method, body });
+  const server = await listen((req, res, body, bytes) => {
+    requests.push({ path: req.url, method: req.method, body, headers: req.headers, bytes: bytes?.length });
     res.setHeader('content-type', 'application/json');
     const send = (obj, status = 200) => { res.statusCode = status; res.end(JSON.stringify(obj)); };
+    const origin = `http://127.0.0.1:${server.address().port}`;
+
+    // ── Files API (resumable upload, status, delete) ──
+    if (req.url === '/upload/v1beta/files' && req.headers['x-goog-upload-command'] === 'start') {
+      res.setHeader('x-goog-upload-url', `${origin}/upload/session/${nextFile}`);
+      return res.end('{}');
+    }
+    if (req.url.startsWith('/upload/session/')) {
+      const id = `fake${nextFile++}`;
+      files.set(id, { polls: processingPolls, mimeType: req.headers['content-type'] || 'audio/mpeg' });
+      return send({ file: { name: `files/${id}`, uri: `${origin}/v1beta/files/${id}`, mimeType: 'audio/mpeg', state: processingPolls > 0 ? 'PROCESSING' : 'ACTIVE' } });
+    }
+    const fileMatch = req.url.match(/^\/v1beta\/files\/([A-Za-z0-9_-]+)$/);
+    if (fileMatch) {
+      const id = fileMatch[1];
+      if (req.method === 'DELETE') { files.delete(id); return send({}); }
+      const f = files.get(id);
+      if (!f) return send({ error: { message: `You do not have permission to access the File ${id} or it may not exist.` } }, 403);
+      if (f.polls > 0) f.polls--;
+      return send({ name: `files/${id}`, uri: `${origin}/v1beta/files/${id}`, mimeType: 'audio/mpeg', state: f.polls > 0 ? 'PROCESSING' : 'ACTIVE' });
+    }
+
 
     if (failure) {
       const f = failure; failure = null;
@@ -103,6 +140,13 @@ export async function fakeGemini({ rejectSchemaOnce = false, failModels = {} } =
     }
     if (req.url.includes(':generateContent')) {
       const model = req.url.match(/models\/([^:]+):/)?.[1];
+      // A referenced uploaded file must still exist (deleted or expired files are refused, as by the real API).
+      for (const turn of body.contents || []) {
+        for (const part of turn.parts || []) {
+          const id = part.fileData?.fileUri?.match(/\/files\/([A-Za-z0-9_-]+)$/)?.[1];
+          if (id && !files.has(id)) return send({ error: { message: `You do not have permission to access the File ${id} or it may not exist.` } }, 403);
+        }
+      }
       if (failModels[model]) return send({ error: { message: `fake failure for ${model}` } }, failModels[model]);
       const cfg = body.generationConfig || {};
       if (rejectSchemaOnce && !rejected && cfg.responseSchema) {

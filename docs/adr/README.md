@@ -11,3 +11,4 @@ Short notes on significant decisions: the context, what was decided, and the con
 | [0005](0005-qa-based-evaluation.md) | Information loss is measured with an LLM question-answering test | Accepted |
 | [0006](0006-keep-offline-extractive-baseline.md) | Keep the offline extractive engine alongside the LLM engines | Accepted |
 | [0007](0007-local-exact-token-counting.md) | Count tokens locally with a real tokenizer | Accepted |
+| [0008](0008-recordings-and-audio-briefing.md) | Meeting recordings go through Gemini's file store, and briefings are real MP3s | Accepted |

@@ -30,7 +30,9 @@ Served by `server/index.js` on `http://localhost:3000` (set `PORT` / `HOST`). Us
 |---|---|
 | Text per request | 600,000 characters (UI allows 500,000) |
 | JSON body | 3 MB |
-| Upload | 15 MB |
+| Document upload | 15 MB |
+| Recording upload | 200 MB |
+| Audio briefing text | 15,000 characters |
 | Question | 1,000 characters |
 | Chat history | last 20 turns, each trimmed to 4,000 characters |
 
@@ -118,11 +120,45 @@ Body: the **raw file bytes**. Only the extension of `name` is used: `.pdf`, `.do
 }
 ```
 
+## `POST /api/media/upload?name=<filename>` *(Gemini)*
+
+Body: the **raw bytes** of a meeting recording. The type is taken from the extension of `name`: `.mp3 .wav .m4a .aac .ogg .flac` (audio) or `.mp4 .mov .webm .mpeg .mpg .avi .wmv .3gp` (video). Up to 200 MB. The file is sent on to Gemini's file store and **not kept by this server**.
+
+```json
+{ "fileUri": "https://generativelanguage.googleapis.com/v1beta/files/abc123", "mimeType": "audio/mpeg", "kind": "audio" }
+```
+
+`422` unsupported type · `413` over 200 MB · `400` empty · `503` no Gemini key · `429`/`502` Gemini limits or failure. Video files are processed by Gemini before the call returns (can take a while for long recordings).
+
+## `POST /api/media/delete`
+
+```json
+{ "fileUri": "https://generativelanguage.googleapis.com/v1beta/files/abc123" }   →   { "deleted": true }
+```
+
+Deletes an uploaded recording from Gemini now (it would expire after 48 hours anyway). Only URIs inside Gemini's own file store are accepted (`400` otherwise).
+
+## `POST /api/tts` *(OpenAI text-to-speech)*
+
+```json
+{ "text": "Summary. … Key points. 1. … Decisions and action items. 1. …" }
+```
+
+Responds with **`audio/mpeg`** (an MP3), not JSON. Text over 4,000 characters is spoken in pieces and joined into one file. `400` empty text · `413` over 15,000 characters · `503` no OpenAI key. Model: `OPENAI_TTS_MODEL` (default `gpt-4o-mini-tts`).
+
 ## `POST /api/video/compress` *(Gemini)*
 
 ```json
 { "url": "https://youtu.be/<id>", "mode": "both", "level": "balanced" }
 ```
+
+For an uploaded recording send `media` (and optionally `kind`) instead of `url`:
+
+```json
+{ "media": { "fileUri": "…/files/abc123", "mimeType": "audio/mpeg" }, "kind": "audio", "mode": "both", "level": "balanced" }
+```
+
+`videoId` is `null` in the response for a recording (there is no YouTube moment to link to).
 
 ```json
 {
@@ -139,6 +175,8 @@ Body: the **raw file bytes**. Only the extension of `name` is used: `.pdf`, `.do
 `model` is the model that actually answered (it may be a fallback). `tokens.original` is the **video's** token count (Gemini's prompt tokens minus our own prompt text); either value may be `null` if Gemini's counter failed. Times that are not valid clock times are returned as `null`. `503` if `GEMINI_API_KEY` is missing; `429` on free-tier limits; `400`/`403` for private or unavailable videos.
 
 ## `POST /api/video/ask` *(Gemini)*
+
+`url` can be replaced by `media` here too.
 
 ```json
 {

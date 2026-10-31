@@ -122,25 +122,61 @@ function videoUrlFrom(input) {
 }
 
 /**
- * Summary / key points / action items for a public YouTube video.
- * Gemini watches the video, so this works without captions.
+ * What the model should watch or listen to: a public YouTube link, or a file
+ * the user uploaded earlier ({ fileUri, mimeType } from uploadMedia).
+ * @returns {{ videoId: string|null, videoUrl?: string, media?: { fileUri: string, mimeType: string } }}
  */
-export async function videoCompress({ url, mode, level }) {
-  requireVideo();
+function sourceFrom({ url, media }) {
+  if (media) {
+    if (!gemini.isGeminiFileUri(media.fileUri) || typeof media.mimeType !== 'string') {
+      throw new LlmError('That recording is not valid. Upload it again.', 400);
+    }
+    return { videoId: null, media: { fileUri: media.fileUri, mimeType: media.mimeType } };
+  }
   const video = videoUrlFrom(url);
-  const system = P.buildVideoSystem({ level, mode });
-  const user = 'Summarize this video.';
+  return { videoId: video.id, videoUrl: video.url };
+}
+
+/** Upload a meeting recording (audio or video) to Gemini so it can be summarised. */
+export async function uploadMedia({ buffer, filename }) {
+  requireVideo();
+  const type = P.mediaTypeFor(filename);
+  if (!type) throw new LlmError(`Unsupported recording type. Use ${Object.keys(P.MEDIA_TYPES).join(', ')}.`, 422);
+  if (buffer.length > P.MAX_MEDIA_BYTES) {
+    throw new LlmError(`That file is over ${P.MAX_MEDIA_BYTES / 1024 / 1024} MB. Export the audio only, or trim the recording.`, 413);
+  }
+  const { fileUri, mimeType } = await gemini.uploadFile(buffer, type.mimeType, filename);
+  return { fileUri, mimeType, kind: type.kind };
+}
+
+/** Delete an uploaded recording from Gemini now (it would expire after 48 hours anyway). */
+export async function deleteMedia({ fileUri }) {
+  requireVideo();
+  if (!gemini.isGeminiFileUri(fileUri)) throw new LlmError('That recording is not valid.', 400);
+  try { await gemini.deleteFile(fileUri); } catch { /* already gone or expired: nothing to do */ }
+  return { deleted: true };
+}
+
+/**
+ * Summary / key points / action items for a public YouTube video or an uploaded
+ * recording. Gemini watches or listens, so this works without captions.
+ */
+export async function videoCompress({ url, media, mode, level, kind = 'video' }) {
+  requireVideo();
+  const source = sourceFrom({ url, media });
+  const system = P.buildVideoSystem({ level, mode, media: media ? kind : 'video' });
+  const user = media && kind === 'audio' ? 'Summarize this recording.' : 'Summarize this video.';
 
   const { data, usage } = await gemini.generateJson({
-    system, user, videoUrl: video.url, lowResolution: true,
+    system, user, videoUrl: source.videoUrl, media: source.media, lowResolution: true,
     schema: P.buildCompressSchema({ mode, kind: 'video' }),
   });
 
   const keyPoints = data.key_points ? P.resolveClockTimes(data.key_points) : null;
   const compressedText = [data.summary, ...(keyPoints || []).map(k => k.text)].filter(Boolean).join(' ');
 
-  // Token counts from Gemini's own tokenizer: the video, and what the summary costs.
-  // The request's prompt text is subtracted so "original" is just the video.
+  // Token counts from Gemini's own tokenizer: the media, and what the summary costs.
+  // The request's prompt text is subtracted so "original" is just the media.
   let originalTokens = null;
   let compressedTokens = null;
   try {
@@ -153,7 +189,7 @@ export async function videoCompress({ url, mode, level }) {
   } catch { /* leave null: the client falls back to an estimate */ }
 
   return {
-    videoId: video.id,
+    videoId: source.videoId,
     summary: data.summary ?? null,
     keyPoints,
     actions: P.resolveClockTimes(data.action_items),
@@ -167,11 +203,11 @@ const MAX_QUESTION = 1000;
 const MAX_HISTORY = 20;
 const MAX_TURN = 4000;
 
-/** Answer a question about the video, with earlier turns for context. */
-export async function videoAsk({ url, question, history = [] }) {
+/** Answer a question about the video or recording, with earlier turns for context. */
+export async function videoAsk({ url, media, question, history = [] }) {
   requireVideo();
-  const video = videoUrlFrom(url);
-  if (typeof question !== 'string' || !question.trim()) throw new LlmError('Type a question about the video.', 400);
+  const source = sourceFrom({ url, media });
+  if (typeof question !== 'string' || !question.trim()) throw new LlmError('Type a question about it.', 400);
   if (question.length > MAX_QUESTION) throw new LlmError(`Keep the question under ${MAX_QUESTION} characters.`, 400);
 
   const turns = (Array.isArray(history) ? history : [])
@@ -179,6 +215,41 @@ export async function videoAsk({ url, question, history = [] }) {
     .slice(-MAX_HISTORY)
     .map(h => ({ role: h.role, text: h.text.slice(0, MAX_TURN) }));
 
-  const answer = await gemini.askVideo({ system: P.VIDEO_QA_SYSTEM, videoUrl: video.url, history: turns, question: question.trim() });
+  const answer = await gemini.askVideo({
+    system: P.VIDEO_QA_SYSTEM, videoUrl: source.videoUrl, media: source.media, history: turns, question: question.trim(),
+  });
   return { answer, model: await gemini.model() };
+}
+
+// ─── Audio briefing (OpenAI text-to-speech) ────────────────────────────────
+
+const TTS_CHUNK_CHARS = 3500;                 // the API accepts up to 4096 per request
+export const TTS_MAX_CHARS = 15_000;          // cost guard: about 10 minutes of speech
+
+/** Split text at sentence ends into pieces the speech API accepts. */
+export function splitForSpeech(text, limit = TTS_CHUNK_CHARS) {
+  const sentences = text.replace(/\s+/g, ' ').trim().match(/[^.!?।]+[.!?।]*\s*/g) || [text];
+  const chunks = [];
+  let current = '';
+  for (const raw of sentences) {
+    // A single enormous "sentence" (no punctuation) is cut at the limit.
+    for (let s = raw; s.length > 0; s = s.slice(limit)) {
+      const piece = s.slice(0, limit);
+      if ((current + piece).length > limit && current) { chunks.push(current.trim()); current = ''; }
+      current += piece;
+      if (s.length <= limit) break;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
+/** Turn text into one MP3 (a listenable briefing, e.g. for a commute). */
+export async function textToSpeech({ text }) {
+  requireText();
+  if (typeof text !== 'string' || !text.trim()) throw new LlmError('There is no text to turn into audio.', 400);
+  if (text.length > TTS_MAX_CHARS) throw new LlmError(`That is too long for one audio file (over ${TTS_MAX_CHARS} characters). Use a shorter compression level.`, 413);
+  const parts = [];
+  for (const chunk of splitForSpeech(text)) parts.push(await openai.speak(chunk));
+  return Buffer.concat(parts);
 }

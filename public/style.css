@@ -1638,3 +1638,7 @@ a.kp-time:hover { background: var(--color-brand-medium); }
 
 /* Timestamp chips inside running text (chat answers) should hug the sentence */
 .chat-msg .kp-time { margin: 0 1px; }
+
+/* ── 23. AUDIO BRIEFING ────────────────────────────────────────── */
+.audio-player { display: block; width: 100%; margin: var(--space-3) 0; }
+#audio-download { display: inline-flex; text-decoration: none; margin-top: var(--space-2); }

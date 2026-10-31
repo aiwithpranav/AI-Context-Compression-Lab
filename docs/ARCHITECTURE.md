@@ -96,6 +96,36 @@ Model selection (ADR-0004): `GEMINI_MODEL` pins one model and disables the fallb
 
 Three sequential calls to the text provider (see ADR-0005): (1) write questions with gold answers from the **original**; (2) answer them seeing **only the compressed text**; (3) grade, and list unsupported claims. Score = (correct + ½·partial) ÷ questions. Videos are excluded: there is no source text.
 
+### 3.6 Meeting recordings
+
+Zoom and Google Meet recording links are private (login, passcode), so the app cannot fetch them. The user downloads the recording and uploads the file.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Server
+    participant G as Gemini
+    B->>S: POST /api/media/upload?name=weekly.mp3 (raw bytes, ≤ 200 MB)
+    S->>S: check extension → MIME type, size
+    S->>G: resumable upload (start, then upload+finalize)
+    G-->>S: file {uri, state}
+    loop until ACTIVE (video needs processing)
+        S->>G: GET files/<id>
+    end
+    S-->>B: {fileUri, mimeType, kind}
+    B->>S: POST /api/video/compress {media, kind, mode, level}
+    S->>G: generateContent(fileData: fileUri, schema)
+    G-->>S: summary, key points + times, action items
+    B->>S: POST /api/video/ask {media, question, history}
+    B->>S: POST /api/media/delete {fileUri}   (on Clear / tab close)
+```
+
+The server never stores the file: it is buffered in memory for the upload and dropped. `fileUri` values are only accepted if they point into Gemini's own file store, so the routes cannot be used to make the server fetch arbitrary URLs. Audio uses an "audio recording" prompt (no mention of on-screen content, and "never invent names"); video uses the video prompt.
+
+### 3.7 Audio briefing
+
+The browser composes the text (summary, then key points, then action items) and posts it to `POST /api/tts`. The server splits it at sentence ends into pieces of at most 3,500 characters (the speech API takes 4,096), calls OpenAI text-to-speech for each, joins the MP3 pieces and returns one `audio/mpeg` response. The page plays it from a `blob:` URL and offers it as a download. A downloaded MP3 keeps playing with the phone locked, which the free in-browser *Listen* button (speech synthesis) does not — that is why both exist.
+
 ## 4. Data handling
 
 | Data | Where it goes | Stored? |
@@ -103,6 +133,8 @@ Three sequential calls to the text provider (see ADR-0005): (1) write questions 
 | Pasted text / extracted document text | Browser → server → OpenAI (only if the LLM engine is chosen) | No |
 | Uploaded file bytes | Browser → server memory → parsed → discarded | No |
 | YouTube URL and questions | Browser → server → Gemini | No |
+| Meeting recording | Browser → server memory → Gemini file store → deleted on Clear / tab close (Google expires it after 48 h regardless) | No (not by this server) |
+| Briefing text | Browser → server → OpenAI text-to-speech → MP3 back to the browser | No |
 | API keys | Server environment / `.env` (git-ignored) | Only on the user's disk |
 | Results | Browser memory | No (lost on reload) |
 

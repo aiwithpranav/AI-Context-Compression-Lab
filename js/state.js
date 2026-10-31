@@ -60,11 +60,11 @@ const AppState = (() => {
   /**
    * Begin processing — sets flag and emits event.
    */
-  function startProcessing() {
+  function startProcessing(engine) {
     _state.isProcessing = true;
     _state.error = null;
     _state.results = null;
-    emit('processingStart');
+    emit("processingStart", engine);
   }
 
   /**

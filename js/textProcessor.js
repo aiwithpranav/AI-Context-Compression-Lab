@@ -135,7 +135,8 @@ const TextProcessor = (() => {
 
     const tf = computeTermFrequency(sentences);
     const idf = computeIDF(sentences);
-    const maxTF = Math.max(...tf.values()) || 1;
+    let maxTF = 1; // loop, not Math.max(...spread): a huge vocabulary overflows the call stack
+    tf.forEach(v => { if (v > maxTF) maxTF = v; });
     const n = sentences.length;
 
     return sentences.map((sentence, index) => {
@@ -183,8 +184,11 @@ const TextProcessor = (() => {
       scored.push({ word, score: freq * (idf.get(word) || 1) });
     });
 
+    // Ties (common in short texts, where most words occur once) are broken by
+    // word length, then alphabetically — never by position, which would
+    // favour the opening sentences and filler like "today" or "actually".
     return scored
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.score - a.score || b.word.length - a.word.length || a.word.localeCompare(b.word))
       .slice(0, n)
       .map(item => item.word);
   }

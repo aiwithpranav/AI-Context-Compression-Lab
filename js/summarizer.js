@@ -40,8 +40,8 @@ const Summarizer = (() => {
    * @param {'light'|'balanced'|'aggressive'} [level='balanced'] - Compression level
    * @returns {{ summary: string, selectedCount: number, totalCount: number, level: string }}
    */
-  function generateSummary(text, level = 'balanced') {
-    const sentences = TextProcessor.tokenizeIntoSentences(text);
+  function generateSummary(text, level = 'balanced', presplit = null) {
+    const sentences = presplit || TextProcessor.tokenizeIntoSentences(text);
 
     if (sentences.length === 0) {
       return { summary: '', selectedCount: 0, totalCount: 0, level };

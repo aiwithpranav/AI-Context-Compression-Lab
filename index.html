@@ -118,6 +118,40 @@
           </p>
         </div>
 
+        <!-- Source Tabs: text / video link / transcript file -->
+        <div class="source-tabs" role="tablist" aria-label="Input source">
+          <button id="tab-text" class="source-tab active" type="button" role="tab" aria-selected="true"
+            data-source="text">📝 Paste Text</button>
+          <button id="tab-video" class="source-tab" type="button" role="tab" aria-selected="false"
+            data-source="video">🎬 Video Link</button>
+          <button id="tab-file" class="source-tab" type="button" role="tab" aria-selected="false"
+            data-source="file">📄 Upload File</button>
+        </div>
+
+        <div id="source-video" class="source-panel hidden">
+          <div class="source-row">
+            <input id="video-url" class="source-input" type="url" inputmode="url"
+              placeholder="https://www.youtube.com/watch?v=..." aria-label="YouTube video link" />
+            <button id="btn-video-gemini" class="btn btn-primary" type="button">Summarize with Gemini</button>
+            <button id="btn-fetch-video" class="btn btn-secondary" type="button">Captions only</button>
+          </div>
+          <p id="video-hint" class="source-hint">Gemini watches the video itself (speech and on-screen content), then
+            you can ask it questions. Public videos only. "Captions only" loads the transcript into the box below
+            instead, and works offline with the extractive engine.</p>
+        </div>
+
+        <div id="source-file" class="source-panel hidden">
+          <div class="source-row">
+            <input id="transcript-file" class="source-input" type="file"
+              accept=".vtt,.srt,.txt,.pdf,.docx,.xlsx,.csv"
+              aria-label="Document: PDF, Word, Excel, CSV, transcript or text" />
+          </div>
+          <p class="source-hint">PDF, Word (.docx), Excel (.xlsx), CSV, meeting transcripts (.vtt / .srt from Zoom,
+            Meet, Teams) or plain .txt. Scanned PDFs (images) and old .doc / .xls files are not supported.</p>
+        </div>
+
+        <p id="source-status" class="source-status hidden" role="status" aria-live="polite"></p>
+
         <!-- Live Stats Bar -->
         <div class="live-stats-bar" role="status" aria-live="polite" aria-label="Input statistics">
           <div class="stat-chip">
@@ -144,6 +178,32 @@
           <div class="textarea-corner-hint" id="textarea-hint">
             Drag to resize ↕
           </div>
+        </div>
+
+        <!-- Engine Selector: offline extractive vs Claude -->
+        <div class="compression-level-control" role="group" aria-labelledby="engine-control-label">
+          <span id="engine-control-label" class="level-control-label">Compression Engine</span>
+          <div class="level-options">
+            <label class="level-option">
+              <input type="radio" name="engine" value="extractive" checked
+                aria-label="Extractive engine: offline, selects existing sentences" />
+              <span class="level-option-pill">
+                <span class="level-option-icon" aria-hidden="true">📐</span>
+                <span class="level-option-name">Extractive</span>
+                <span class="level-option-desc">Offline · picks existing sentences</span>
+              </span>
+            </label>
+            <label class="level-option">
+              <input type="radio" name="engine" value="llm" disabled
+                aria-label="OpenAI engine: rewrites the text with an LLM" />
+              <span class="level-option-pill">
+                <span class="level-option-icon" aria-hidden="true">🤖</span>
+                <span class="level-option-name">OpenAI (LLM)</span>
+                <span class="level-option-desc">Rewrites in its own words</span>
+              </span>
+            </label>
+          </div>
+          <p id="engine-hint" class="source-hint">Checking server…</p>
         </div>
 
         <!-- Compression Level Selector -->
@@ -347,6 +407,8 @@
             </div>
 
             <div class="card-footer">
+              <button id="btn-listen-summary" class="btn btn-copy btn-listen" type="button" data-listen="summary"
+                aria-label="Listen to summary">🔊 Listen</button>
               <button id="btn-copy-summary" class="btn btn-copy" type="button" aria-label="Copy summary to clipboard">
                 <span class="copy-icon" aria-hidden="true">
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -382,6 +444,8 @@
             </div>
 
             <div class="card-footer">
+              <button id="btn-listen-keypoints" class="btn btn-copy btn-listen" type="button" data-listen="keypoints"
+                aria-label="Listen to key points">🔊 Listen</button>
               <button id="btn-copy-keypoints" class="btn btn-copy" type="button"
                 aria-label="Copy key points to clipboard">
                 <span class="copy-icon" aria-hidden="true">
@@ -393,6 +457,90 @@
                 </span>
                 Copy Key Points
               </button>
+            </div>
+          </article>
+
+          <!-- ── Engine Comparison Card ── -->
+          <article id="compare-card" class="result-card result-card--wide hidden" aria-labelledby="compare-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon" aria-hidden="true">⚖️</div>
+                <h3 id="compare-heading" class="card-title">Engine Comparison</h3>
+              </div>
+              <div class="card-badge card-badge--purple">Same input</div>
+            </div>
+            <div class="card-body">
+              <div class="table-scroll">
+                <table class="compare-table">
+                  <thead>
+                    <tr>
+                      <th>Engine</th><th>Level</th><th>Tokens</th><th>Reduction</th><th>Ratio</th>
+                      <th>Keyword coverage</th><th>QA score</th>
+                    </tr>
+                  </thead>
+                  <tbody id="compare-body"></tbody>
+                </table>
+              </div>
+              <p class="source-hint">Run the same text through both engines to compare them. Tokens are exact (Claude's
+                tokenizer) when the server has an API key, otherwise estimated (~). Keyword coverage penalises rewording,
+                so a rewritten summary can score low there even when the meaning is intact — the QA score from the
+                evaluation below is the fairer comparison.</p>
+            </div>
+          </article>
+
+          <!-- ── LLM Evaluation Card ── -->
+          <article id="eval-card" class="result-card result-card--wide hidden" aria-labelledby="eval-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon" aria-hidden="true">🧪</div>
+                <h3 id="eval-heading" class="card-title">Did the meaning survive?</h3>
+              </div>
+              <div class="card-badge card-badge--green">LLM-graded</div>
+            </div>
+            <div class="card-body">
+              <p class="preservation-subtitle">Claude writes questions from the <em>original</em> text, answers them
+                using <em>only the compressed text</em>, then grades the answers and flags anything the compressed text
+                claims that the original doesn't support. Unlike keyword coverage, this tests understanding.</p>
+              <button id="btn-evaluate" class="btn btn-primary" type="button">Run evaluation</button>
+              <p id="eval-status" class="source-hint" role="status" aria-live="polite"></p>
+              <div id="eval-result"></div>
+            </div>
+          </article>
+
+          <!-- ── Ask About The Video (Gemini) ── -->
+          <article id="video-chat-card" class="result-card result-card--wide hidden" aria-labelledby="video-chat-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon" aria-hidden="true">💬</div>
+                <h3 id="video-chat-heading" class="card-title">Ask about this video</h3>
+              </div>
+              <div class="card-badge card-badge--purple">Gemini</div>
+            </div>
+            <div class="card-body">
+              <div id="video-chat-log" class="chat-log" role="log" aria-live="polite"></div>
+              <form id="video-chat-form" class="source-row" autocomplete="off">
+                <input id="video-chat-input" class="source-input" type="text" maxlength="1000"
+                  placeholder="e.g. What are the main steps? Who said what?" aria-label="Question about the video" />
+                <button id="btn-video-ask" class="btn btn-primary" type="submit">Ask</button>
+              </form>
+              <p class="source-hint">Answers come from the video itself and cite moments like [1:23] you can click.
+                If the video doesn't say, it should tell you instead of guessing.</p>
+            </div>
+          </article>
+
+          <!-- ── Action Items Card (transcripts only) ── -->
+          <article id="actions-card" class="result-card hidden" aria-labelledby="actions-heading">
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="card-icon" aria-hidden="true">✅</div>
+                <h3 id="actions-heading" class="card-title">Decisions &amp; Action Items</h3>
+              </div>
+              <div class="card-badge card-badge--green">Meetings</div>
+            </div>
+            <div class="card-body">
+              <ul id="actions-list" class="keypoints-list" aria-label="Decisions and action items"></ul>
+              <p class="source-hint">Found by keyword matching (e.g. "we will", "deadline", "agreed"). Review before
+                relying on it.</p>
             </div>
           </article>
 
@@ -573,13 +721,16 @@
         <span class="footer-dot" aria-hidden="true">·</span>
         <span>LLM Learning Series</span>
         <span class="footer-dot" aria-hidden="true">·</span>
-        <span>Algorithmic NLP · No external API</span>
+        <span>Extractive NLP (offline) + OpenAI (text) + Gemini (video)</span>
       </div>
     </div>
   </footer>
 
   <!-- Scripts — load order matters (dependencies first) -->
   <script src="js/tokenizer.js"></script>
+  <script src="js/llmClient.js"></script>
+  <script src="js/transcript.js"></script>
+  <script src="js/speech.js"></script>
   <script src="js/textProcessor.js"></script>
   <script src="js/summarizer.js"></script>
   <script src="js/keyPoints.js"></script>

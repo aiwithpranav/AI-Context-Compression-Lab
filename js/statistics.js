@@ -14,6 +14,8 @@ const Statistics = (() => {
    * @returns {CompressionStats}
    *
    * @typedef {Object} CompressionStats
+   * @property {boolean} tokensAreExact  true when counted by a real tokenizer, false when estimated
+   * @property {boolean} sourceIsVideo  original size is only known as a token count (null chars/words)
    * @property {number} originalChars
    * @property {number} compressedChars
    * @property {number} originalWords
@@ -26,35 +28,47 @@ const Statistics = (() => {
    * @property {number} charReduction
    * @property {number} wordReduction
    */
-  function computeStats(original, compressed) {
-    const originalChars   = Tokenizer.countChars(original);
-    const compressedChars = Tokenizer.countChars(compressed);
-    const originalWords   = Tokenizer.countWords(original);
-    const compressedWords = Tokenizer.countWords(compressed);
-    const originalTokens  = Tokenizer.estimateTokens(original);
-    const compressedTokens = Tokenizer.estimateTokens(compressed);
+  function computeStats(original, compressed, exactTokens = null, opts = {}) {
+    // A video has no source text: its size is only known as a token count from Gemini.
+    const sourceIsVideo = Boolean(opts.sourceIsVideo);
 
-    const tokensSaved = Math.max(0, originalTokens - compressedTokens);
+    const originalChars   = sourceIsVideo ? null : Tokenizer.countChars(original);
+    const compressedChars = Tokenizer.countChars(compressed);
+    const originalWords   = sourceIsVideo ? null : Tokenizer.countWords(original);
+    const compressedWords = Tokenizer.countWords(compressed);
+
+    let originalTokens, compressedTokens, tokensAreExact;
+    if (sourceIsVideo) {
+      originalTokens   = opts.originalTokens ?? null;
+      compressedTokens = opts.compressedTokens ?? Tokenizer.estimateTokens(compressed);
+      tokensAreExact   = opts.originalTokens != null && opts.compressedTokens != null;
+    } else {
+      // exactTokens = [original, compressed] from a real tokenizer, when available
+      tokensAreExact   = Array.isArray(exactTokens);
+      originalTokens   = tokensAreExact ? exactTokens[0] : Tokenizer.estimateTokens(original);
+      compressedTokens = tokensAreExact ? exactTokens[1] : Tokenizer.estimateTokens(compressed);
+    }
+
+    // Ratios need both sizes; null means "unknown", shown as a dash.
+    const known = originalTokens !== null && originalTokens > 0;
+    const tokensSaved = known ? Math.max(0, originalTokens - compressedTokens) : null;
 
     // Compression ratio: how many times smaller is the output? (floor at 1.0×)
-    const compressionRatio = originalTokens > 0
-      ? Math.max(1, originalTokens / Math.max(1, compressedTokens))
-      : 1;
+    const compressionRatio = known ? Math.max(1, originalTokens / Math.max(1, compressedTokens)) : null;
 
     // Context reduction as a percentage
-    const contextReduction = originalTokens > 0
+    const contextReduction = known
       ? Math.max(0, ((originalTokens - compressedTokens) / originalTokens) * 100)
-      : 0;
+      : null;
 
-    const charReduction = originalChars > 0
-      ? Math.max(0, ((originalChars - compressedChars) / originalChars) * 100)
-      : 0;
-
-    const wordReduction = originalWords > 0
-      ? Math.max(0, ((originalWords - compressedWords) / originalWords) * 100)
-      : 0;
+    const reduction = (o, c) => (o ? Math.max(0, ((o - c) / o) * 100) : 0);
+    const charReduction = sourceIsVideo ? null : reduction(originalChars, compressedChars);
+    const wordReduction = sourceIsVideo ? null : reduction(originalWords, compressedWords);
+    const round = (v, d) => (v === null ? null : parseFloat(v.toFixed(d)));
 
     return {
+      tokensAreExact,
+      sourceIsVideo,
       originalChars,
       compressedChars,
       originalWords,
@@ -62,10 +76,10 @@ const Statistics = (() => {
       originalTokens,
       compressedTokens,
       tokensSaved,
-      compressionRatio: parseFloat(compressionRatio.toFixed(2)),
-      contextReduction: parseFloat(contextReduction.toFixed(1)),
-      charReduction: parseFloat(charReduction.toFixed(1)),
-      wordReduction: parseFloat(wordReduction.toFixed(1)),
+      compressionRatio: round(compressionRatio, 2),
+      contextReduction: round(contextReduction, 1),
+      charReduction: round(charReduction, 1),
+      wordReduction: round(wordReduction, 1),
     };
   }
 
@@ -75,7 +89,7 @@ const Statistics = (() => {
    * @returns {string}
    */
   function formatRatio(ratio) {
-    return `${ratio.toFixed(2)}×`;
+    return ratio === null || ratio === undefined ? '—' : `${ratio.toFixed(2)}×`;
   }
 
   /**
@@ -84,7 +98,7 @@ const Statistics = (() => {
    * @returns {string}
    */
   function formatPercent(pct) {
-    return `${pct.toFixed(1)}%`;
+    return pct === null || pct === undefined ? '—' : `${pct.toFixed(1)}%`;
   }
 
   /**
@@ -92,8 +106,9 @@ const Statistics = (() => {
    * @param {number} tokens
    * @returns {string}
    */
-  function formatTokens(tokens) {
-    return `~${Tokenizer.formatNumber(tokens)}`;
+  function formatTokens(tokens, exact = false) {
+    if (tokens === null || tokens === undefined) return '—';
+    return `${exact ? '' : '~'}${Tokenizer.formatNumber(tokens)}`;
   }
 
   /**

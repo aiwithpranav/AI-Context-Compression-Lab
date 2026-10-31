@@ -25,13 +25,29 @@ const KeyPoints = (() => {
    * @param {'light'|'balanced'|'aggressive'} [level='balanced'] - Compression level
    * @returns {string[]} Array of bullet-point strings (no "•" prefix — caller adds it)
    */
-  function extractKeyPoints(text, level = 'balanced') {
-    const maxPoints = LEVEL_MAX_POINTS[level] ?? LEVEL_MAX_POINTS.balanced;
-    const sentences = TextProcessor.tokenizeIntoSentences(text);
+  function extractKeyPoints(text, level = 'balanced', presplit = null) {
+    return extractKeyPointsDetailed(text, level, presplit).map(p => p.text);
+  }
+
+  /**
+   * Same as extractKeyPoints but also returns the source sentence index of
+   * each point, so callers can map points back to timestamps.
+   * @param {string} text
+   * @param {'light'|'balanced'|'aggressive'} [level='balanced']
+   * @param {string[]|null} [presplit] - pre-split sentences (skips splitting)
+   * @returns {{ text: string, index: number }[]}
+   */
+  function extractKeyPointsDetailed(text, level = 'balanced', presplit = null) {
+    const sentences = presplit || TextProcessor.tokenizeIntoSentences(text);
+    // Never more points than the level allows, and fewer for short texts
+    // (a 1-minute video should not get 6 key points out of 9 sentences).
+    const levelMax = LEVEL_MAX_POINTS[level] ?? LEVEL_MAX_POINTS.balanced;
+    const proportional = Math.ceil(sentences.length * Summarizer.getRatioForLevel(level));
+    const maxPoints = Math.min(levelMax, Math.max(2, proportional));
 
     if (sentences.length === 0) return [];
     if (sentences.length <= 2) {
-      return sentences.slice(0, maxPoints).map(_trimToKeyPoint);
+      return sentences.slice(0, maxPoints).map((s, index) => ({ text: _trimToKeyPoint(s), index }));
     }
 
     const ranked = TextProcessor.rankSentences(sentences);
@@ -51,20 +67,12 @@ const KeyPoints = (() => {
       const keyPoint = _trimToKeyPoint(item.sentence);
       if (keyPoint.length < 8) continue;
 
-      selected.push(keyPoint);
+      selected.push({ text: keyPoint, index: item.index });
       keywords.forEach(kw => usedKeywords.add(kw));
     }
 
     // Re-sort by original sentence index for a natural reading order
-    const selectedIndices = selected.map(kp => {
-      const found = ranked.find(r => _trimToKeyPoint(r.sentence) === kp);
-      return found ? found.index : 0;
-    });
-
-    const paired = selected.map((kp, i) => ({ kp, idx: selectedIndices[i] }));
-    paired.sort((a, b) => a.idx - b.idx);
-
-    return paired.map(p => p.kp);
+    return selected.sort((a, b) => a.index - b.index);
   }
 
   /**
@@ -114,6 +122,7 @@ const KeyPoints = (() => {
 
   return {
     extractKeyPoints,
+    extractKeyPointsDetailed,
     LEVEL_MAX_POINTS,
   };
 

@@ -40,16 +40,6 @@ const Tokenizer = (() => {
     return text ? text.length : 0;
   }
 
-  /**
-   * Count sentences using punctuation-aware splitting.
-   * @param {string} text
-   * @returns {number}
-   */
-  function countSentences(text) {
-    if (!text || text.trim().length === 0) return 0;
-    const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
-    return sentences.length;
-  }
 
   /**
    * Format a number with thousands separators.
@@ -64,7 +54,6 @@ const Tokenizer = (() => {
     estimateTokens,
     countWords,
     countChars,
-    countSentences,
     formatNumber,
   };
 

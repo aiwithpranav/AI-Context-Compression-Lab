@@ -140,19 +140,10 @@ const Preservation = (() => {
     return { High: 'level-high', Moderate: 'level-moderate', Low: 'level-low' }[level] || 'level-low';
   }
 
-  /**
-   * Get icon for a level.
-   * @param {'High'|'Moderate'|'Low'} level
-   * @returns {string}
-   */
-  function getLevelIcon(level) {
-    return { High: '✓', Moderate: '~', Low: '!' }[level] || '?';
-  }
 
   return {
     evaluatePreservation,
     getLevelClass,
-    getLevelIcon,
   };
 
 })();

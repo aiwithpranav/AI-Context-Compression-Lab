@@ -111,24 +111,12 @@ const Statistics = (() => {
     return `${exact ? '' : '~'}${Tokenizer.formatNumber(tokens)}`;
   }
 
-  /**
-   * Get the reduction level label based on contextReduction percentage.
-   * @param {number} pct
-   * @returns {string}
-   */
-  function getReductionLabel(pct) {
-    if (pct >= 70) return 'Major';
-    if (pct >= 40) return 'Significant';
-    if (pct >= 20) return 'Moderate';
-    return 'Minimal';
-  }
 
   return {
     computeStats,
     formatRatio,
     formatPercent,
     formatTokens,
-    getReductionLabel,
   };
 
 })();

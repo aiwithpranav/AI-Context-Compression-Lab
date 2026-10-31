@@ -80,19 +80,6 @@ const Summarizer = (() => {
     };
   }
 
-  /**
-   * Get the human-readable description of a compression level.
-   * @param {'light'|'balanced'|'aggressive'} level
-   * @returns {string}
-   */
-  function getLevelDescription(level) {
-    const descriptions = {
-      light:      'Preserves most information with moderate length reduction.',
-      balanced:   'Balances compression with information preservation.',
-      aggressive: 'Maximum context reduction; essential meaning retained.',
-    };
-    return descriptions[level] || descriptions.balanced;
-  }
 
   /**
    * Get the ratio for a given level (used externally for key-point count).
@@ -117,7 +104,6 @@ const Summarizer = (() => {
 
   return {
     generateSummary,
-    getLevelDescription,
     getRatioForLevel,
     LEVEL_RATIOS,
   };

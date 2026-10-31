@@ -11,7 +11,7 @@ Add a small Node server. It holds the keys (environment / `.env`), calls the pro
 ## Consequences
 + Keys never reach the browser; one place to add validation, limits and error handling.
 + Enables captions, document parsing and exact local tokenization.
-− Features need `npm start`; opening `index.html` directly only gives the offline engine.
+− Features need `npm start`; opening `public/index.html` directly only gives the offline engine.
 − The server is a new attack surface and has no authentication, so it must stay local.
 
 ## Alternatives considered

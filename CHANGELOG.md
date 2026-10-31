@@ -14,10 +14,11 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - **Exact token counts** from a local OpenAI-compatible tokenizer (FR-3, ADR-0007).
 - **LLM evaluation** ("Did the meaning survive?"): question-answering test plus unsupported-claim detection (FR-5, ADR-0005) and an **engine comparison** table (FR-6).
 - **Listen**: read the summary or key points aloud (FR-12).
-- Node server (`server.js`) holding API keys, fetching captions and parsing uploads (ADR-0001).
-- 71 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
+- Node server (`server/index.js`) holding API keys, fetching captions and parsing uploads (ADR-0001).
+- 72 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
 
 ### Changed
+- Project layout: browser files moved to `public/` (the only directory the server serves) and the server entry point to `server/index.js`.
 - Concept coverage: dropped the Jaccard term, scales the keyword set to text length, uses light stemming, and breaks ties by word length instead of position (ADR-0005).
 - Key points scale with text length, so a one-minute video no longer gets a long list.
 - "Summary + Key Points" statistics no longer double-count sentences that appear in both.

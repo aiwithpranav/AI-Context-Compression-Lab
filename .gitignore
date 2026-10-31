@@ -1,2 +1,20 @@
+# Dependencies
 node_modules/
+
+# Secrets: keys live in .env, never in the repository
 .env
+.env.*
+!.env.example
+
+# Logs and local tooling
+*.log
+npm-debug.log*
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage output
+coverage/

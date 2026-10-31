@@ -1,5 +1,5 @@
 /**
- * Tests for server.js routes and document extraction, over real HTTP,
+ * Tests for the server routes (server/index.js) and document extraction, over real HTTP,
  * with the OpenAI and Gemini APIs replaced by fakes.
  */
 
@@ -24,7 +24,7 @@ before(async () => {
   process.env.GEMINI_BASE_URL = geminiFake.url;
   process.env.GEMINI_API_KEY = 'test-gemini';
 
-  const mod = await import('../server.js');
+  const mod = await import('../server/index.js');
   normaliseCaptionTimes = mod.normaliseCaptionTimes;
   server = mod.createServer();
   await new Promise(r => server.listen(0, r));
@@ -47,7 +47,7 @@ test('GET /api/status lists both engines', async () => {
 });
 
 test('server code and dependencies are never served', async () => {
-  for (const p of ['/server.js', '/server/llm.js', '/package.json', '/.env', '/node_modules/openai/package.json', '/tests/fakes.js']) {
+  for (const p of ['/server/index.js', '/server/llm.js', '/package.json', '/.env', '/node_modules/openai/package.json', '/tests/fakes.js', '/docs/SECURITY.md', '/public/index.html']) {
     assert.equal((await fetch(base + p)).status, 404, p);
   }
   assert.equal((await fetch(base + '/')).status, 200);
@@ -55,6 +55,14 @@ test('server code and dependencies are never served', async () => {
 });
 
 // ─── Document upload ───────────────────────────────────────────────────────
+
+test('path traversal cannot escape public/', async () => {
+  const host = `127.0.0.1:${server.address().port}`;
+  // fetch() would normalise "..", so send the raw paths
+  for (const p of ['/%2e%2e/package.json', '/js/%2e%2e/%2e%2e/.env', '/..%2fserver%2fllm.js', '/%2e%2e%2f%2e%2e%2fetc%2fpasswd']) {
+    assert.equal(await rawRequest({ Host: host }, p), 404, p);
+  }
+});
 
 test('extracts text from a PDF', async () => {
   const body = await (await upload('report.pdf', fixture('sample.pdf'))).json();

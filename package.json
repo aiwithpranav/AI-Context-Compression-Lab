@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Compress text, documents and YouTube videos with LLMs and measure what meaning survives",
   "scripts": {
-    "start": "node server.js",
+    "start": "node server/index.js",
     "test": "node --test"
   },
   "repository": {

@@ -10,7 +10,7 @@ How the requirements in [REQUIREMENTS.md](REQUIREMENTS.md) are verified, and wha
 | **Integration** | Server routes over real HTTP; provider modules against **fake** OpenAI/Gemini servers; document extraction against fixture files | `node:test`, `tests/fakes.js`, `tests/fixtures/` | Yes |
 | **Manual acceptance** | Behaviour that depends on real providers, real browsers or audio | Checklist in §4 | No |
 
-Run everything: `npm test` (71 tests, no API keys, no network, no cost).
+Run everything: `npm test` (72 tests, no API keys, no network, no cost).
 
 ## 2. Automated coverage
 
@@ -18,7 +18,7 @@ Run everything: `npm test` (71 tests, no API keys, no network, no cost).
 |---|---|---|
 | `tests/client.test.js` | 23 | Subtitle parsing (VTT/SRT/plain), chunking, action items, transcript state; extractive summary/key points (ordering, level scaling, duplicate sentences, short texts); concept coverage (monotonic with compression, position-independent, stemming); stats incl. video stats and dashes for unknown values; huge-vocabulary regression |
 | `tests/llm.test.js` | 29 | Prompts and schemas per mode/kind/level; key-point limit; clock-time validation; Gemini schema conversion; OpenAI request shape (strict `json_schema`) and result mapping; local token counts without a key; missing-key messages; provider error mapping (429/401/404); 3-step evaluation and scoring (answerer never sees the original); Gemini model ranking (speed-first, previews excluded), fallback on 503/404/429, no fallback for 403 or a pinned model, remembering the working model; video request shape (URL, MIME type, low resolution, schema); token arithmetic; schema-rejection retry; Q&A history handling and validation |
-| `tests/server.test.js` | 19 | `/api/status`; static allow-list; PDF/DOCX/XLSX/CSV extraction and every upload error; route validation; OpenAI and Gemini routes; 503 without keys; JSON/content-type handling; **request guard** (foreign Host, foreign Origin, `ALLOWED_HOSTS`, malformed URL); caption time-unit regression (59-second video) |
+| `tests/server.test.js` | 20 | `/api/status`; static serving limited to `public/` incl. path-traversal attempts; PDF/DOCX/XLSX/CSV extraction and every upload error; route validation; OpenAI and Gemini routes; 503 without keys; JSON/content-type handling; **request guard** (foreign Host, foreign Origin, `ALLOWED_HOSTS`, malformed URL); caption time-unit regression (59-second video) |
 
 ### Regression tests for defects found during development
 

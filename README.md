@@ -47,7 +47,7 @@ Also: **Listen** (reads the summary aloud), **exact token counts**, an **Engine 
  YouTube link ───────►│  Listen (text-to-speech) · engine comparison · video chat       │
                       └───────┬───────────────────────────────────────────────────────┘
                               │  /api/compress /tokens /evaluate /extract /video/*
-                      ┌───────▼────────────────── server.js ──────────────────────────┐
+                      ┌───────▼─────────────── server/index.js ───────────────────────┐
                       │  holds the API keys · parses PDF/DOCX/XLSX · fetches captions  │
                       │  server/llm.js ─┬─► providers/openai.js  (text)                │
                       │                 └─► providers/gemini.js  (video, REST)         │
@@ -93,7 +93,7 @@ Open <http://localhost:3000>.
 | `OPENAI_API_KEY` | Text compression and evaluation | platform.openai.com |
 | `GEMINI_API_KEY` | YouTube video summary and questions | **Free** key: aistudio.google.com/apikey |
 
-Both are optional. **Without any key** you still get the offline engine, document upload, transcripts, captions, exact token counts and Listen — the LLM options are greyed out with the reason. Opening `index.html` directly (no server) gives the offline engine and subtitle/text files only.
+Both are optional. **Without any key** you still get the offline engine, document upload, transcripts, captions, exact token counts and Listen — the LLM options are greyed out with the reason. Opening `public/index.html` directly (no server) gives the offline engine and subtitle/text files only.
 
 Optional: `OPENAI_MODEL`, `GEMINI_MODEL` (pins one model and turns off the fallback; default is speed-first with fallback), `PORT`, `HOST` (default `127.0.0.1`), `ALLOWED_HOSTS` (extra hostnames, e.g. behind a reverse proxy).
 
@@ -107,28 +107,33 @@ Optional: `OPENAI_MODEL`, `GEMINI_MODEL` (pins one model and turns off the fallb
 npm test
 ```
 
-71 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
+72 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
 
 ---
 
 ## Project structure
 
 ```
-├── index.html, style.css            UI
-├── server.js                        Routes, static files, YouTube captions
-├── server/
+.
+├── public/                          Everything the browser may load (the only thing served)
+│   ├── index.html, style.css        UI
+│   └── js/                          Browser code
+│       ├── app.js                   Pipelines: text, video, chat, uploads, engine comparison
+│       ├── llmClient.js             Calls our server (never holds a key)
+│       ├── transcript.js, speech.js Subtitles → timed chunks; text-to-speech
+│       └── textProcessor / summarizer / keyPoints / statistics / preservation / …
+├── server/                          Backend — never served to the browser
+│   ├── index.js                     Entry point: routes, request guard, static files, YouTube captions
 │   ├── llm.js                       Orchestrates providers: compress, evaluate, videoCompress, videoAsk
 │   ├── prompts.js                   Prompts, JSON schemas, pure helpers (provider-neutral)
 │   ├── providers/openai.js          Text engine + local tokenizer
 │   ├── providers/gemini.js          Video engine (REST), model ranking + fallback, schema retry
 │   ├── extract.js                   PDF / DOCX / XLSX / CSV → text
 │   └── youtube.js                   Link parsing
-├── js/                              Browser code
-│   ├── app.js                       Pipelines: text, video, chat, uploads, engine comparison
-│   ├── llmClient.js                 Calls our server (never holds a key)
-│   ├── transcript.js, speech.js     Subtitles → timed chunks; text-to-speech
-│   └── textProcessor / summarizer / keyPoints / statistics / preservation / …
-└── tests/                           node:test suites, fake APIs, document fixtures
+├── tests/                           node:test suites, fake APIs, document fixtures
+├── docs/                            Requirements, architecture, ADRs, API, security, test plan
+├── .github/                         CI workflow, PR and issue templates
+└── package.json, .env.example, CHANGELOG.md, CONTRIBUTING.md
 ```
 
 ---

@@ -1,6 +1,6 @@
 # HTTP API
 
-Served by `server.js` on `http://localhost:3000` (set `PORT` / `HOST`). Used by the web page; documented here for developers and tests.
+Served by `server/index.js` on `http://localhost:3000` (set `PORT` / `HOST`). Used by the web page; documented here for developers and tests.
 
 **Conventions**
 

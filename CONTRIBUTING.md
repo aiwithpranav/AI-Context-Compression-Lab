@@ -22,10 +22,18 @@ Node 20.12 or newer. There is no build step.
 5. **Open a pull request** using the template. CI (`npm test` on Node 20 and 22) must pass.
 6. **Update docs** that your change affects: README, `docs/API.md`, `CHANGELOG.md` (under *Unreleased*), and an ADR if you made a decision that is hard to reverse.
 
+## Repository layout
+
+- `public/` — everything the browser loads (and the only thing the server serves).
+- `server/` — backend code; never served. `server/index.js` is the entry point.
+- `tests/`, `docs/`, `.github/` — verification, documentation, CI.
+
+Keep that boundary: browser files go in `public/`, anything that touches a key or the file system goes in `server/`.
+
 ## Code conventions
 
 - Match the surrounding style (see `.editorconfig`): 2-space indent, LF line endings, single quotes in JS.
-- Browser code is plain scripts exposing one global each (`Summarizer`, `UI`, …); load order is in `index.html`. Server code is ES modules.
+- Browser code is plain scripts exposing one global each (`Summarizer`, `UI`, …); load order is in `public/index.html`. Server code is ES modules.
 - **Never insert model output or document text as HTML.** Use `textContent` or DOM nodes.
 - **Keys stay on the server.** The browser never receives or sends a provider key.
 - Prompts, schemas and pure helpers go in `server/prompts.js`; provider-specific wire details go in `server/providers/`. Do not mix them.

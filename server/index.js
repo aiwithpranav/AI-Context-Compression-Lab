@@ -1,6 +1,6 @@
 /**
- * server.js
- * Static server + API.
+ * server/index.js
+ * Entry point: static files (public/) + API.
  *
  *   GET  /api/status                → which engines are configured
  *   GET  /api/transcript?url=<yt>   → captions: { videoId, segments: [{ start, text }], language }
@@ -21,14 +21,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { YoutubeTranscript } from 'youtube-transcript';
-import * as llm from './server/llm.js';
-import { extractFromFile, ExtractError } from './server/extract.js';
-import { extractVideoId } from './server/youtube.js';
+import * as llm from './llm.js';
+import { extractFromFile, ExtractError } from './extract.js';
+import { extractVideoId } from './youtube.js';
 
-// Load .env if present (Node 20.12+). Real environment variables win.
-try { process.loadEnvFile(); } catch { /* no .env — fine */ }
+// Repository layout: public/ is everything the browser may load; server/ never is.
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PUBLIC_DIR = path.join(ROOT, 'public');
 
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
+// Load .env from the project root (Node 20.12+), whatever directory the server was started from.
+// Real environment variables win.
+try { process.loadEnvFile(path.join(ROOT, '.env')); } catch { /* no .env — fine */ }
 const MAX_JSON_BYTES = 3_000_000;    // ~500k chars of text plus JSON overhead
 const MAX_UPLOAD_BYTES = 15_000_000;
 
@@ -215,12 +218,10 @@ async function handleStatic(url, res) {
   try { rel = decodeURIComponent(url.pathname); }
   catch { res.writeHead(400); return res.end('Bad request'); }
   if (rel === '/') rel = '/index.html';
-  const file = path.normalize(path.join(ROOT, rel));
-  // Only serve the front-end files, never server code or node_modules.
-  const allowed = file === path.join(ROOT, 'index.html')
-               || file === path.join(ROOT, 'style.css')
-               || file.startsWith(path.join(ROOT, 'js') + path.sep);
-  if (!allowed) { res.writeHead(404); return res.end('Not found'); }
+
+  // Only files inside public/ are served — never server code, tests, docs or .env.
+  const file = path.normalize(path.join(PUBLIC_DIR, rel));
+  if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(404); return res.end('Not found'); }
   try {
     const data = await fs.readFile(file);
     res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });

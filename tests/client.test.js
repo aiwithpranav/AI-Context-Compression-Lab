@@ -10,7 +10,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'js');
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'js');
 const files = ['tokenizer', 'textProcessor', 'summarizer', 'keyPoints', 'statistics', 'preservation', 'transcript'];
 const source = files.map(f => fs.readFileSync(path.join(root, f + '.js'), 'utf8')).join('\n');
 const { Tokenizer, TextProcessor, Summarizer, KeyPoints, Statistics, Preservation, Transcript } = vm.runInNewContext(

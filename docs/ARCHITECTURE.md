@@ -19,14 +19,14 @@ The system runs on the user's machine. The only external parties are the model p
 ```mermaid
 flowchart TB
     subgraph Browser
-        UI[index.html · ui.js · app.js]
+        UI[public/index.html · ui.js · app.js]
         EXT[Extractive engine<br/>textProcessor · summarizer · keyPoints]
         MET[statistics · preservation]
         TR[transcript.js<br/>VTT/SRT → timed chunks]
         SP[speech.js]
         CL[llmClient.js]
     end
-    subgraph Server["Node server (server.js)"]
+    subgraph Server["Node server (server/index.js)"]
         GUARD[Request guard<br/>host · origin · content type]
         ROUTES[Routes]
         LLM[server/llm.js<br/>orchestration]
@@ -46,7 +46,7 @@ flowchart TB
 |---|---|---|
 | **Browser** | UI, offline engine, subtitle parsing, read-aloud, metrics display. | Hold an API key; call a provider directly. |
 | **Request guard** | Refuse anything not from the local page. | — |
-| **Routes** (`server.js`) | Validate input, call one function, map errors to HTTP statuses. | Contain prompts or provider details. |
+| **Routes** (`server/index.js`) | Validate input, call one function, map errors to HTTP statuses. | Contain prompts or provider details. |
 | **`llm.js`** | Combine prompts, providers and result mapping into five operations: `compress`, `evaluate`, `countTokens`, `videoCompress`, `videoAsk`. | Know provider wire formats. |
 | **`prompts.js`** | Prompts, JSON schemas, validation and mapping helpers. Pure functions. | Make network calls. |
 | **Providers** | One module per vendor: request shape, error translation, retries. Same return shape (`{ data, usage }`). | Contain business rules. |

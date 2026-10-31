@@ -15,11 +15,11 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - **LLM evaluation** ("Did the meaning survive?"): question-answering test plus unsupported-claim detection (FR-5, ADR-0005) and an **engine comparison** table (FR-6).
 - **Listen**: read the summary or key points aloud (FR-12).
 - Node server (`server/index.js`) holding API keys, fetching captions and parsing uploads (ADR-0001).
-- 95 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
+- 107 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
 
 - **Meeting recordings**: upload an MP3, M4A, WAV, MP4, MOV or WEBM (up to 200 MB); Gemini listens, then returns a summary, key points and action items with timestamps, and answers questions about it. The uploaded file is deleted on Clear or tab close (FR-15, ADR-0008).
-- **🎧 Audio** button in the Video Link tab, beside *Summarize with Gemini* and *Captions only*: one click from a YouTube link to an MP3 briefing, or choose *Summarize with Gemini* for the text summary only. An existing summary of the same link and level is reused instead of calling Gemini again.
-- **Audio briefing**: create an MP3 of the summary, key points and action items with OpenAI text-to-speech; play it or download it to listen on a phone, for example while driving (FR-16, ADR-0008).
+- **🎧 Audio** button in the Video Link tab, beside *Summarize with Gemini* and *Captions only*: turns the **whole video** into audio — Gemini writes out everything said, a voice reads it, in order — instead of a summary (FR-17, ADR-0009). The audio is close to the video's length but about 15 % shorter in a real 14-minute test, and the page shows its real length.
+- **Audio of the summary**: after any summary, *Create audio of the summary (MP3)* makes an MP3 of the summary only (of the key points, if that is all you asked for), to play or download and listen to on a phone, for example while driving (FR-16, ADR-0008).
 
 ### Changed
 - Project layout: browser files moved to `public/` (the only directory the server serves) and the server entry point to `server/index.js`.
@@ -47,7 +47,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Only front-end files are served; `.env` is git-ignored. See `docs/SECURITY.md`.
 
 ### Known issues
-- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries, video and recording question-and-answer (including unanswerable and Marathi questions), recording upload and delete, MP3 briefings, and the OpenAI text flow. Not yet: the LLM evaluation (MT-3), a long Zoom/Meet MP4, and listening on a phone with the screen locked (`docs/TEST_PLAN.md`).
+- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries, video and recording question-and-answer (including unanswerable and Marathi questions), recording upload and delete, MP3 briefings, and the OpenAI text flow. Whole-video audio was run with real keys on a 14-minute talk (transcription and one voiced piece) and end to end on a 19-second video. Not yet: a full 10-minute video voiced end to end, the LLM evaluation (MT-3), a long Zoom/Meet MP4, and listening on a phone with the screen locked (`docs/TEST_PLAN.md`).
 - Speech recognition can mishear names (a test heard "Meera" as "Neira"); check action-item owners.
 - `npm audit` reports moderate advisories via `exceljs` → `uuid`; the affected code path is not used (see `docs/SECURITY.md`).
 - No license file yet; `package.json` declares ISC by default and the owner should confirm.

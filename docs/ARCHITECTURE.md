@@ -122,9 +122,32 @@ sequenceDiagram
 
 The server never stores the file: it is buffered in memory for the upload and dropped. `fileUri` values are only accepted if they point into Gemini's own file store, so the routes cannot be used to make the server fetch arbitrary URLs. Audio uses an "audio recording" prompt (no mention of on-screen content, and "never invent names"); video uses the video prompt.
 
-### 3.7 Audio briefing
+### 3.7 Audio of a summary
 
-The browser composes the text (summary, then key points, then action items) and posts it to `POST /api/tts`. The server splits it at sentence ends into pieces of at most 3,500 characters (the speech API takes 4,096), calls OpenAI text-to-speech for each, joins the MP3 pieces and returns one `audio/mpeg` response. The page plays it from a `blob:` URL and offers it as a download. A downloaded MP3 keeps playing with the phone locked, which the free in-browser *Listen* button (speech synthesis) does not — that is why both exist.
+The browser sends the **summary** (or the key points, if no summary was asked for) to `POST /api/tts`. The server splits it at sentence ends into pieces of at most 3,500 characters (the speech API takes 4,096), voices them with OpenAI text-to-speech and returns one `audio/mpeg` response. The page plays it from a `blob:` URL and offers it as a download. A downloaded MP3 keeps playing with the phone locked, which the free in-browser *Listen* button (speech synthesis) does not — that is why both exist.
+
+### 3.8 The whole video as audio
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Server
+    participant G as Gemini
+    participant O as OpenAI TTS
+    B->>S: POST /api/video/audio {url | media}
+    S->>G: generateContent(video, "transcribe everything said", up to 32k output tokens)
+    G-->>S: the full text (or NO SPEECH / cut off → error)
+    S->>S: split into ≤ 3,500-character pieces
+    par four at a time
+        S->>O: speech(piece 1)
+        S->>O: speech(piece 2)
+        S->>O: speech(piece n)
+    end
+    O-->>S: MP3 pieces
+    S-->>B: one MP3, pieces joined in order
+```
+
+Design points: the text is requested as **plain prose, not JSON** (long JSON strings are fragile); a transcript that hit the model's output limit is **refused**, never turned into a silently shorter audio; speech pieces are voiced in parallel (measured: one 3,500-character piece takes ~30 s) with at most four in flight, and joined by position, so a slow first piece still comes first. The original audio track is never copied — that would mean downloading from YouTube, which its terms forbid.
 
 ## 4. Data handling
 

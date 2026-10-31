@@ -51,6 +51,8 @@ const UI = (() => {
       audioCard:             document.getElementById('audio-card'),
       btnMakeAudio:          document.getElementById('btn-make-audio'),
       audioStatus:           document.getElementById('audio-status'),
+      audioHeading:          document.getElementById('audio-heading'),
+      audioDesc:             document.getElementById('audio-desc'),
       audioPlayer:           document.getElementById('audio-player'),
       audioDownload:         document.getElementById('audio-download'),
 
@@ -116,6 +118,7 @@ const UI = (() => {
     llm:        { label: 'Asking OpenAI...',        sub: 'Rewriting your text in its own words' },
     video:      { label: 'Gemini is watching the video...', sub: 'Longer videos can take a minute or two' },
     recording:  { label: 'Gemini is listening to the recording...', sub: 'Long meetings can take a few minutes' },
+    fullaudio:  { label: 'Turning the whole video into audio...', sub: 'Gemini writes out everything said, then a voice reads it. About a minute or two for a 10-minute video.' },
   };
 
   function showProcessing(engine = 'extractive') {
@@ -151,6 +154,8 @@ const UI = (() => {
     _showSection(els.resultsSection);
 
     const { mode, level, summary, keyPoints, keyPointTimes, actions, videoId, stats, preservation, memoryTrick } = results;
+
+    _setResultsTitle('Compression Results', 'Your text has been analyzed, compressed, and evaluated below.');
 
     // Show the compression level badge in the results header
     _renderLevelBadge(level);
@@ -505,8 +510,64 @@ const UI = (() => {
     if (_audioUrl) { URL.revokeObjectURL(_audioUrl); _audioUrl = null; }
   }
 
+  const AUDIO_CARD = {
+    briefing: {
+      heading: 'Listen on the go',
+      desc: null,   // the text in index.html
+    },
+    full: {
+      heading: 'The whole video as audio',
+      desc: 'Everything said in the video, read aloud by a voice. It is a little shorter than the video because pauses, laughter and music are left out, and the voice is not the original speaker. Play it here, or download the MP3 for your phone.',
+    },
+  };
+  let _briefingDesc = null;
+
+  function _setAudioCardMode(mode) {
+    if (els.audioDesc && _briefingDesc === null) _briefingDesc = els.audioDesc.innerHTML;
+    if (els.audioHeading) els.audioHeading.textContent = AUDIO_CARD[mode].heading;
+    if (els.audioDesc) {
+      if (AUDIO_CARD[mode].desc) els.audioDesc.textContent = AUDIO_CARD[mode].desc;
+      else els.audioDesc.innerHTML = _briefingDesc;
+    }
+    if (els.btnMakeAudio) els.btnMakeAudio.classList.toggle('hidden', mode === 'full');
+  }
+
+  /**
+   * Show only the audio of the whole video (no summary): hide everything else
+   * in the results area and play the MP3.
+   */
+  function showFullAudio(blob, filename) {
+    hideProcessing();
+    _hideSection(els.emptyState);
+    _hideSection(els.errorState);
+    _hideAllResultCards();
+    _showSection(els.resultsSection);
+    if (els.resultsLevelBadge) { els.resultsLevelBadge.textContent = ''; els.resultsLevelBadge.className = 'results-level-badge'; }
+
+    _setResultsTitle('Your audio', 'The whole video, read aloud.');
+    resetAudio();
+    _setAudioCardMode('full');
+    _showCard(els.audioCard);
+    showAudio(blob, filename);
+    els.audioPlayer.addEventListener('loadedmetadata', () => {
+      if (Number.isFinite(els.audioPlayer.duration)) {
+        els.audioStatus.textContent = `Ready — ${Transcript.formatTime(els.audioPlayer.duration)} of audio. Press play, or download the MP3 for your phone.`;
+      }
+    }, { once: true });
+    if (els.btnTryAgain) els.btnTryAgain.style.display = 'inline-flex';
+    _animateCardsIn();
+  }
+
+  function _setResultsTitle(title, subtitle) {
+    const h = document.getElementById('results-heading');
+    const sub = document.getElementById('results-subtitle');
+    if (h) h.textContent = title;
+    if (sub) sub.textContent = subtitle;
+  }
+
   /** Reset the card for a new result: hide the player, enable or disable the button. */
   function resetAudio() {
+    _setAudioCardMode('briefing');
     _revokeAudio();
     if (els.audioPlayer) { els.audioPlayer.pause(); els.audioPlayer.removeAttribute('src'); els.audioPlayer.classList.add('hidden'); }
     if (els.audioDownload) els.audioDownload.classList.add('hidden');
@@ -872,6 +933,7 @@ const UI = (() => {
     renderResults,
     renderComparison,
     setAudioAvailable,
+    showFullAudio,
     setVideoAudioAvailable,
     setVideoAudioBusy,
     scrollToAudio,

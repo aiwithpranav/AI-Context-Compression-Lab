@@ -26,7 +26,7 @@ Scope: the local Node server and web page in this repository. The supported depl
 | T10 | **Supply chain.** | Few direct dependencies; `package-lock.json` committed; CI runs `npm ci` and `npm audit --audit-level=high`. | CI |
 | T11 | **A recording leaks or lingers.** Recordings can be sensitive (internal meetings). | Sent only to Gemini; held in server memory just for the upload; deleted from Gemini on Clear, on starting a new recording and on tab close (`keepalive` request); Google expires files after 48 h regardless. The upload hint tells the user where it goes. | `llm.test.js` (delete), `server.test.js` |
 | T12 | **Server used to fetch arbitrary URLs / access other files** through the recording reference. | `fileUri` is accepted only if it is inside Gemini's own file store with a plain id (no `..`, extra path, other host); the MIME type comes from the file extension, not from the client. | `llm.test.js` (rejects foreign hosts, traversal, wrong types) |
-| T13 | **Unbounded cost from uploads or text-to-speech.** | 200 MB recording cap checked before upload; 15,000-character cap on audio briefings; every route is local-only (T1–T3). | `llm.test.js` |
+| T13 | **Unbounded cost from uploads or text-to-speech.** | 200 MB recording cap checked before upload; 15,000-character cap on audio of a summary and about 45,000 characters (≈ 45 minutes) on audio of a whole video, checked before any speech is paid for; at most four speech requests in flight; every route is local-only (T1–T3). | `llm.test.js` |
 
 ## 3. Privacy
 

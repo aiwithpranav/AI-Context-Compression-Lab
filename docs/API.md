@@ -32,7 +32,8 @@ Served by `server/index.js` on `http://localhost:3000` (set `PORT` / `HOST`). Us
 | JSON body | 3 MB |
 | Document upload | 15 MB |
 | Recording upload | 200 MB |
-| Audio briefing text | 15,000 characters |
+| Audio of a summary (`/api/tts`) | 15,000 characters |
+| Whole-video audio (`/api/video/audio`) | about 45,000 characters of speech (≈ 45 minutes) |
 | Question | 1,000 characters |
 | Chat history | last 20 turns, each trimmed to 4,000 characters |
 
@@ -138,13 +139,25 @@ Body: the **raw bytes** of a meeting recording. The type is taken from the exten
 
 Deletes an uploaded recording from Gemini now (it would expire after 48 hours anyway). Only URIs inside Gemini's own file store are accepted (`400` otherwise).
 
-## `POST /api/tts` *(OpenAI text-to-speech)*
+## `POST /api/tts` *(OpenAI text-to-speech)* — audio of a summary
 
 ```json
 { "text": "Summary. … Key points. 1. … Decisions and action items. 1. …" }
 ```
 
 Responds with **`audio/mpeg`** (an MP3), not JSON. Text over 4,000 characters is spoken in pieces and joined into one file. `400` empty text · `413` over 15,000 characters · `503` no OpenAI key. Model: `OPENAI_TTS_MODEL` (default `gpt-4o-mini-tts`).
+
+## `POST /api/video/audio` *(Gemini + OpenAI)* — the whole video as audio
+
+```json
+{ "url": "https://youtu.be/<id>" }          or          { "media": { "fileUri": "…/files/abc123", "mimeType": "audio/mpeg" } }
+```
+
+Gemini watches the video and writes out **everything that is said**, in order (plain text, not a summary); the text is cut into pieces of at most 3,500 characters, voiced by OpenAI text-to-speech four at a time, and joined **in order** into one MP3. Responds with **`audio/mpeg`** and the header `X-Transcript-Chars` (length of the text that was read).
+
+The audio is about as long as the speech in the video, not identical to it: pauses, laughter and music are left out and the voice is different. Measured with real keys (Oct 2026): a 14-minute talk gave about 12 minutes of audio (≈ 15 % shorter).
+
+Slow: about 20 s to transcribe a 14-minute video, then about 30–60 s to voice it. `422` nobody speaks, or more speech than the model can write in one go · `413` over ~45 minutes of speech · `503` Gemini or OpenAI key missing · `400` not a YouTube link.
 
 ## `POST /api/video/compress` *(Gemini)*
 

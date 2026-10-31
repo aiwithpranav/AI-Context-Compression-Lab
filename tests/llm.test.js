@@ -507,3 +507,112 @@ test('text-to-speech says what to set when the OpenAI key is missing', async () 
     process.env.OPENAI_API_KEY = saved;
   }
 });
+
+// ─── The whole video as audio ──────────────────────────────────────────────
+
+// ~9,000 characters of numbered "talk": three speech pieces, each starting with its own number
+const longTalk = Array.from({ length: 150 }, (_, i) => `Part ${String(i + 1).padStart(3, '0')}. ${'Words of the talk. '.repeat(3)}`).join('');
+const videoUrl = 'https://youtu.be/dQw4w9WgXcQ';
+const markers = (mp3) => [...mp3.toString().matchAll(/"(Part \d{3})/g)].map(m => m[1]);
+
+test('the whole video is transcribed in full, then voiced and joined in order', async () => {
+  await withFake({ transcript: longTalk }, async (gem) => {
+    openaiFake.requests.length = 0;
+    const { mp3, chars } = await llm.videoToAudio({ url: videoUrl });
+
+    // Gemini was asked for plain text (not JSON), with room for a long answer
+    const ask = gem.requests.find(r => r.path.includes(':generateContent')).body;
+    assert.match(ask.systemInstruction.parts[0].text, /Transcribe everything that is said/);
+    assert.equal(ask.generationConfig.responseMimeType, undefined);
+    assert.equal(ask.generationConfig.maxOutputTokens, 32768);
+    assert.equal(ask.contents[0].parts[0].fileData.fileUri, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+
+    assert.equal(chars, longTalk.trim().length);
+    const spoken = openaiFake.requests.filter(r => r.path.endsWith('/audio/speech'));
+    assert.ok(spoken.length >= 3 && spoken.every(r => r.body.input.length <= 3500));
+    assert.equal(spoken.map(r => r.body.input).join(' ').replace(/\s+/g, ' ').length, longTalk.replace(/\s+/g, ' ').trim().length, 'no text lost');
+
+    // The first piece answers last, yet it must still come first in the file
+    const order = markers(mp3);
+    assert.equal(order[0], 'Part 001');
+    assert.deepEqual(order, [...order].sort());
+  });
+});
+
+test('pieces are voiced in parallel, but never more than four at a time', async () => {
+  await withFake({ transcript: 'Part 001. ' + 'A sentence that fills the piece. '.repeat(1000) }, async () => {
+    openaiFake.speech.maxInflight = 0;
+    await llm.videoToAudio({ url: videoUrl });
+    assert.ok(openaiFake.speech.maxInflight >= 2, 'ran in parallel');
+    assert.ok(openaiFake.speech.maxInflight <= 4, 'stayed within the limit');
+  });
+});
+
+test('an uploaded recording can be turned into audio too', async () => {
+  await withFake({ transcript: longTalk }, async (gem) => {
+    const media = await llm.uploadMedia({ buffer: Buffer.from('ID3 audio'), filename: 'weekly.mp3' });
+    gem.requests.length = 0;
+    await llm.videoToAudio({ media: { fileUri: media.fileUri, mimeType: media.mimeType } });
+    const ask = gem.requests.find(r => r.path.includes(':generateContent')).body;
+    assert.deepEqual(ask.contents[0].parts[0].fileData, { mimeType: 'audio/mpeg', fileUri: media.fileUri });
+    assert.equal(ask.contents[0].parts[1].text, 'Transcribe this recording.');
+  });
+});
+
+test('a video with no speech says so instead of making silent audio', async () => {
+  await withFake({ transcript: 'NO SPEECH' }, async () => {
+    openaiFake.requests.length = 0;
+    await assert.rejects(llm.videoToAudio({ url: videoUrl }), (e) => e.httpStatus === 422 && /Nobody speaks/.test(e.message));
+    assert.equal(openaiFake.requests.length, 0, 'no speech was paid for');
+  });
+});
+
+test('a transcript cut off by the output limit is refused, not turned into a short audio', async () => {
+  await withFake({ transcript: longTalk.slice(0, 2000), transcriptFinish: 'MAX_TOKENS' }, async () => {
+    openaiFake.requests.length = 0;
+    await assert.rejects(llm.videoToAudio({ url: videoUrl }), (e) => e.httpStatus === 422 && /too much speech/.test(e.message));
+    assert.equal(openaiFake.requests.length, 0);
+  });
+});
+
+test('very long speech is refused before any text-to-speech is paid for', async () => {
+  await withFake({ transcript: 'Part 001. ' + 'Long. '.repeat(10000) }, async () => {
+    openaiFake.requests.length = 0;
+    await assert.rejects(llm.videoToAudio({ url: videoUrl }), (e) => e.httpStatus === 413 && /too much speech/.test(e.message));
+    assert.equal(openaiFake.requests.length, 0);
+  });
+});
+
+test('a model with a lower output limit is retried with a smaller one', async () => {
+  await withFake({ transcript: longTalk, rejectBigOutput: true }, async (gem) => {
+    const { chars } = await llm.videoToAudio({ url: videoUrl });
+    assert.equal(chars, longTalk.trim().length);
+    const asks = gem.requests.filter(r => r.path.includes(':generateContent')).map(r => r.body.generationConfig.maxOutputTokens);
+    assert.deepEqual(asks, [32768, 8192]);
+  });
+});
+
+test('whole-video audio needs both keys, and checks before calling anything', async () => {
+  await withFake({ transcript: longTalk }, async (gem) => {
+    const savedOpenAI = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      gem.requests.length = 0;
+      await assert.rejects(llm.videoToAudio({ url: videoUrl }), /OPENAI_API_KEY/);
+      assert.equal(gem.requests.length, 0, 'did not spend Gemini quota before noticing the missing key');
+    } finally {
+      process.env.OPENAI_API_KEY = savedOpenAI;
+    }
+    const savedGemini = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    try {
+      await assert.rejects(llm.videoToAudio({ url: videoUrl }), /GEMINI_API_KEY/);
+    } finally {
+      process.env.GEMINI_API_KEY = savedGemini;
+    }
+  });
+});
+
+test('a bad link is refused before anything is called', async () => {
+  await assert.rejects(llm.videoToAudio({ url: 'not a link' }), (e) => e.httpStatus === 400);
+});

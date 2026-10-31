@@ -126,14 +126,14 @@ const LLMClient = (() => {
 
   // ─── Audio briefing (OpenAI text-to-speech) ──────────────────────────────
 
-  /** Resolves to an MP3 Blob. */
-  async function tts(text) {
+  /** POST JSON, get an MP3 back. Resolves to an audio Blob. */
+  async function _postForAudio(path, body) {
     let res;
     try {
-      res = await fetch('/api/tts', {
+      res = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(body),
       });
     } catch {
       throw new Error('Cannot reach the server. Start it with "npm start".');
@@ -144,6 +144,16 @@ const LLMClient = (() => {
       throw new Error((data && data.error) || `Server error (${res.status}).`);
     }
     return res.blob();
+  }
+
+  /** The summary (or key points) as an MP3. */
+  function tts(text) {
+    return _postForAudio('/api/tts', { text });
+  }
+
+  /** The WHOLE video or recording as an MP3: Gemini writes out everything said, a voice reads it. Slow. */
+  function videoAudio({ url, media }) {
+    return _postForAudio('/api/video/audio', { url, media });
   }
 
   // ─── Documents ───────────────────────────────────────────────────────────
@@ -158,7 +168,7 @@ const LLMClient = (() => {
     textUnavailableReason, videoUnavailableReason,
     compress, countTokens, evaluate,
     videoCompress, videoAsk,
-    mediaUpload, mediaDelete, mediaDeleteOnExit, tts,
+    mediaUpload, mediaDelete, mediaDeleteOnExit, tts, videoAudio,
     extractFile,
   };
 

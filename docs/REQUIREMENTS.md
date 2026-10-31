@@ -41,7 +41,8 @@ Priority: **M** = must, **S** = should.
 | **FR-13** | The application **degrades gracefully**: with no API keys the offline engine, uploads, transcripts, captions, token counts and read-aloud still work, and unavailable features are disabled with the reason shown. | M |
 | **FR-14** | The user can **copy** results and **clear** everything. | S |
 | **FR-15** | The user can upload a **meeting recording** (audio: MP3, M4A, WAV, AAC, OGG, FLAC; video: MP4, MOV, WEBM, MPEG, AVI, WMV, 3GP; up to 200 MB). Gemini listens to it and returns a summary, key points and action items with timestamps, and the user can ask questions about it. Unsupported or oversize files are refused before anything is uploaded. The uploaded file is deleted from Gemini when the user clears the page or closes the tab. | M |
-| **FR-16** | From any result the user can create an **audio briefing** — an MP3 of the summary, key points and action items — to play in the page or download, for listening where reading is not possible (for example while driving). It must keep playing with the phone screen locked once downloaded. In the Video Link tab, an **Audio button** beside *Summarize with Gemini* and *Captions only* goes from a YouTube link to the MP3 in one click (summarise, then create the MP3); if that link was already summarised at the same level, the result is reused instead of calling Gemini again. The *Listen on the go* card remains for creating audio after reading any summary (text, document, transcript, recording or video). | M |
+| **FR-16** | After any summary the user can create an **audio of the summary** — an MP3 of the summary text (of the key points, if only those were asked for) — to play in the page or download, for listening where reading is not possible (for example while driving). It must keep playing with the phone screen locked once downloaded. | M |
+| **FR-17** | In the Video Link tab an **Audio button** (beside *Summarize with Gemini* and *Captions only*) turns the **whole video** into audio: everything said, in order, read aloud, with no summary. The result is about as long as the speech in the video — close to the original length, not identical — and the page shows the real audio length. Videos with no speech, or with more speech than about 45 minutes of audio, are refused with a clear message before any speech is paid for. | M |
 
 ## 4. Non-functional requirements
 
@@ -58,7 +59,7 @@ Priority: **M** = must, **S** = should.
 | **NFR-9** | Compatibility | Current Chrome, Edge, Firefox and Safari 16.4+; Node.js 20.12 or newer on the server. |
 | **NFR-11** | Performance | A video summary should not stall on a single overloaded model: failing or slow (150 s) models are skipped automatically. Reference measurements, not guarantees: 19-second video ≈ 6 s, 14-minute talk ≈ 27 s (free tier, Oct 2026). |
 | **NFR-12** | Privacy | An uploaded recording leaves the machine only for Gemini, is not kept by this server, and is deleted from Gemini on Clear / tab close (Google also expires files after 48 hours). The user is told this before uploading. |
-| **NFR-13** | Cost control | Audio briefings are capped (15,000 characters ≈ 10 minutes of speech) and recordings at 200 MB, so one click cannot run up an unbounded bill. |
+| **NFR-13** | Cost control | Audio of a summary is capped (15,000 characters ≈ 10 minutes of speech), audio of a whole video at 45,000 characters (≈ 45 minutes), and recordings at 200 MB, so one click cannot run up an unbounded bill. |
 | **NFR-10** | Accessibility | Interactive controls are keyboard-reachable and labelled; status and results use ARIA live regions. |
 
 ## 5. Constraints and assumptions
@@ -88,6 +89,7 @@ Priority: **M** = must, **S** = should.
 | FR-15 | ADR-0008, ARCHITECTURE §3.6 | `llm.test.js` (upload protocol, processing wait, type/size limits, summary, Q&A, delete, file-store validation), `server.test.js` (upload → summarise → ask → delete, errors, Origin) | MT-11 |
 | FR-16 | ADR-0008, ARCHITECTURE §3.7 | `llm.test.js` (chunking, joining, cost guard, missing key), `server.test.js` (MP3 response, validation) | MT-12 |
 | NFR-11 | ADR-0004 | `llm.test.js` (model ranking and fallback) | MT-6 (timing) |
+| FR-17 | ADR-0009, ARCHITECTURE §3.8 | `llm.test.js` (full transcription, order, parallel limit, recordings, no speech, truncation, cost limit, output-limit retry, missing keys), `server.test.js` (`/api/video/audio`) | MT-13 |
 | NFR-12, NFR-13 | SECURITY T11–T13 | `llm.test.js` (size limit before upload, cost guard), `server.test.js` | MT-11 |
 
 Items marked "real key required" are **not** verified by CI; they need the manual checks in the test plan.

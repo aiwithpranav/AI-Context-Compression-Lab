@@ -170,14 +170,14 @@ export function toGeminiSchema(schema) {
 
 const BLOCKING_FINISH = new Set(['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'RECITATION', 'SPII']);
 
-function readResponse(data) {
+function readResponse(data, { maxTokensMessage } = {}) {
   const cand = data.candidates?.[0];
   if (!cand) {
     const reason = data.promptFeedback?.blockReason;
     throw new LlmError(reason ? `Gemini blocked this request (${reason}).` : 'Gemini returned no answer.', 422);
   }
   if (BLOCKING_FINISH.has(cand.finishReason)) throw new LlmError('Gemini declined to process this content.', 422);
-  if (cand.finishReason === 'MAX_TOKENS') throw new LlmError('The response was cut off. Try a stronger compression level.', 422);
+  if (cand.finishReason === 'MAX_TOKENS') throw new LlmError(maxTokensMessage || 'The response was cut off. Try a stronger compression level.', 422);
   const text = (cand.content?.parts || []).map(p => p.text || '').join('').trim();
   if (!text) throw new LlmError('Gemini returned an empty answer.', 502);
   return { text, usage: data.usageMetadata || {} };
@@ -269,6 +269,39 @@ export async function askVideo({ system, videoUrl, media, history = [], question
     }
   });
   return readResponse(data).text;
+}
+
+const TRANSCRIBE_TIMEOUT_MS = 300_000;
+
+/**
+ * Everything said in a video or recording, as plain text (not JSON, not a summary).
+ * Long output is allowed because the text's length decides how long the audio is.
+ */
+export async function transcribe({ system, user, videoUrl, media }) {
+  const contents = [{ role: 'user', parts: [mediaPart({ videoUrl, media }), { text: user }] }];
+  const attempt = (m, maxOutputTokens, lowResolution) => request(`models/${m}:generateContent`, {
+    body: {
+      systemInstruction: { parts: [{ text: system }] },
+      contents,
+      generationConfig: { maxOutputTokens, ...(lowResolution ? { mediaResolution: 'MEDIA_RESOLUTION_LOW' } : {}) },
+    },
+    timeoutMs: TRANSCRIBE_TIMEOUT_MS,
+  });
+
+  const data = await withFallback(async (m) => {
+    try {
+      return await attempt(m, 32768, true);
+    } catch (err) {
+      // A model may refuse the larger output limit or the media setting: retry plainly.
+      if (err instanceof GeminiHttpError && err.upstreamStatus === 400 && /resolution|unknown name|max_?output|output token/i.test(err.upstreamMessage)) {
+        return attempt(m, 8192, false);
+      }
+      throw err;
+    }
+  });
+  return readResponse(data, {
+    maxTokensMessage: 'This video has too much speech to convert to audio in one go. Try a shorter video (up to about 30 minutes).',
+  }).text;
 }
 
 /** Exact token count for plain text, using Gemini's tokenizer (free endpoint). */

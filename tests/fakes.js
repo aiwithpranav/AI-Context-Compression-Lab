@@ -50,14 +50,22 @@ function answerFor(system, schema) {
 /** @returns {Promise<{ url: string, requests: object[], close: () => void, failNext: (status, message) => void }>} */
 export async function fakeOpenAI() {
   const requests = [];
+  const speech = { inflight: 0, maxInflight: 0 };
   let failure = null;
   const server = await listen((req, res, body) => {
     requests.push({ path: req.url, body });
 
-    // Text-to-speech: answer with fake "MP3" bytes that echo the input length.
+    // Text-to-speech: answer with fake "MP3" bytes that echo the start of the input.
+    // The piece that starts "Part 001" answers slowly, so pieces finish out of order.
     if (req.url.endsWith('/audio/speech')) {
-      res.setHeader('content-type', 'audio/mpeg');
-      return res.end(Buffer.concat([Buffer.from('ID3'), Buffer.from(`[${body.input.length} chars, voice ${body.voice}]`)]));
+      speech.inflight++;
+      speech.maxInflight = Math.max(speech.maxInflight, speech.inflight);
+      const bytes = Buffer.concat([Buffer.from('ID3'), Buffer.from(`[${body.input.length} chars, voice ${body.voice}, "${body.input.slice(0, 8)}"]`)]);
+      return setTimeout(() => {
+        speech.inflight--;
+        res.setHeader('content-type', 'audio/mpeg');
+        res.end(bytes);
+      }, body.input.startsWith('Part 001') ? 150 : 20);
     }
 
     res.setHeader('content-type', 'application/json');
@@ -77,6 +85,7 @@ export async function fakeOpenAI() {
   return {
     url: `http://127.0.0.1:${server.address().port}/v1`,
     requests,
+    speech,
     close: () => server.close(),
     // The OpenAI SDK retries 429/5xx twice by itself, so fail 3 times to surface the error.
     failNext: (status, message) => { failure = { status, message, times: status === 429 || status >= 500 ? 3 : 1 }; },
@@ -86,11 +95,13 @@ export async function fakeOpenAI() {
 /**
  * `rejectSchemaOnce` makes the first generateContent call fail with a schema
  * error, to exercise the plain-JSON retry.
+ * `transcript` is what the fake says when asked to transcribe a video (`transcriptFinish` MAX_TOKENS simulates truncation;
+ * `rejectBigOutput` answers 400 to maxOutputTokens above 8192, like a model with a lower limit).
  * `processingPolls` makes an uploaded file report PROCESSING for that many status checks first.
  * `failModels` maps a model id to an HTTP status it always answers with
  * (e.g. { 'gemini-flash-lite-latest': 503 }), to exercise the model fallback.
  */
-export async function fakeGemini({ rejectSchemaOnce = false, failModels = {}, processingPolls = 0 } = {}) {
+export async function fakeGemini({ rejectSchemaOnce = false, failModels = {}, processingPolls = 0, transcript = null, transcriptFinish = 'STOP', rejectBigOutput = false } = {}) {
   const requests = [];
   const files = new Map();      // id -> { state, polls }
   let nextFile = 1;
@@ -154,6 +165,15 @@ export async function fakeGemini({ rejectSchemaOnce = false, failModels = {}, pr
         return send({ error: { message: 'Invalid JSON payload received. Unknown name "responseSchema"' } }, 400);
       }
       const system = body.systemInstruction.parts[0].text;
+
+      // Whole-video transcription (plain text, long output)
+      if (system.includes('Transcribe everything that is said')) {
+        if (rejectBigOutput && cfg.maxOutputTokens > 8192) return send({ error: { message: 'Invalid value: maxOutputTokens must be <= 8192' } }, 400);
+        return send({
+          candidates: [{ content: { parts: [{ text: transcript ?? 'Part 001. The whole talk is written out here.' }] }, finishReason: transcriptFinish }],
+          usageMetadata: { promptTokenCount: 5000, candidatesTokenCount: 50 },
+        });
+      }
       const asking = !cfg.responseMimeType;
       const text = asking
         ? 'It is explained at [0:12], then repeated at [1:05].'

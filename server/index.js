@@ -13,6 +13,7 @@
  *   POST /api/media/upload?name=    → upload a meeting recording (audio/video, raw bytes) to Gemini
  *   POST /api/media/delete          → delete an uploaded recording from Gemini
  *   POST /api/tts                   → MP3 of a text (OpenAI text-to-speech), for listening on the go
+ *   POST /api/video/audio           → MP3 of the WHOLE video: Gemini writes out everything said, a voice reads it
  *
  * The browser cannot fetch YouTube captions (CORS), parse office files, or be
  * trusted with API keys, so those live here. The offline extractive engine,
@@ -248,6 +249,24 @@ async function handleTts(req, res) {
   }
 }
 
+/** A whole video (or recording) in, one MP3 out. Slow: transcription, then speech. */
+async function handleVideoAudio(req, res) {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'Use POST.' });
+  try {
+    const body = await readJson(req);
+    const { mp3, chars } = await llm.videoToAudio({ url: body.url, media: body.media });
+    res.writeHead(200, {
+      'Content-Type': 'audio/mpeg', 'Content-Length': mp3.length, 'Cache-Control': 'no-store',
+      'X-Transcript-Chars': String(chars),
+    });
+    res.end(mp3);
+  } catch (err) {
+    if (err instanceof LlmError) return sendJson(res, err.httpStatus, { error: err.message });
+    console.error('[video-audio]', err);
+    sendJson(res, 500, { error: 'Unexpected server error.' });
+  }
+}
+
 // ─── Static files ──────────────────────────────────────────────────────────
 
 async function handleStatic(url, res) {
@@ -289,6 +308,7 @@ export function createServer() {
     if (url.pathname === '/api/extract') return run(() => handleExtract(url, req, res));
     if (url.pathname === '/api/media/upload') return run(() => handleMediaUpload(url, req, res));
     if (url.pathname === '/api/tts') return run(() => handleTts(req, res));
+    if (url.pathname === '/api/video/audio') return run(() => handleVideoAudio(req, res));
     if (JSON_ROUTES[url.pathname]) return run(() => handleJsonRoute(JSON_ROUTES[url.pathname], req, res));
     run(() => handleStatic(url, res));
   });

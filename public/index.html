@@ -135,13 +135,14 @@
             <button id="btn-video-gemini" class="btn btn-primary" type="button">Summarize with Gemini</button>
             <button id="btn-fetch-video" class="btn btn-secondary" type="button">Captions only</button>
             <button id="btn-video-audio" class="btn btn-audio" type="button"
-              title="Gemini watches the video, then you get an MP3 briefing to play or download (needs both keys)">🎧 Audio</button>
+              title="The whole video as audio: Gemini writes out everything said and a voice reads it (needs both keys)">🎧 Audio</button>
           </div>
-          <p id="video-hint" class="source-hint">Choose what you want from the link. <strong>Summarize with Gemini</strong> reads
-            the whole video (speech and on-screen content) and gives you the summary and key points, and you can ask it
-            questions. <strong>🎧 Audio</strong> does the same and then turns it into an MP3 briefing you can listen to
-            or download, for example while driving. <strong>Captions only</strong> loads the transcript as text. Public
-            videos only.</p>
+          <p id="video-hint" class="source-hint">Choose what you want from the link. <strong>Summarize with Gemini</strong> gives
+            the summary and key points of the whole video (speech and on-screen content), and you can ask it questions.
+            <strong>🎧 Audio</strong> turns the <em>whole video</em> into audio — everything said, read aloud, for example to
+            listen while driving. It takes a minute or two and comes out a little shorter than the video, because pauses,
+            laughter and music are left out. <strong>Captions only</strong> loads the transcript as text. Public videos
+            only.</p>
         </div>
 
         <div id="source-file" class="source-panel hidden">
@@ -369,7 +370,7 @@
             <h2 id="results-heading" class="section-title">Compression Results</h2>
             <span id="results-level-badge" class="results-level-badge" aria-label="Compression level used"></span>
           </div>
-          <p class="section-subtitle">Your text has been analyzed, compressed, and evaluated below.</p>
+          <p id="results-subtitle" class="section-subtitle">Your text has been analyzed, compressed, and evaluated below.</p>
         </div>
 
         <div class="results-grid">
@@ -524,11 +525,11 @@
               <div class="card-badge card-badge--green">MP3</div>
             </div>
             <div class="card-body">
-              <p class="preservation-subtitle">Turns the summary, key points and action items into an audio file you can
-                play here or download to your phone — for example to listen while driving. Uses OpenAI text-to-speech
-                (a fraction of a cent per briefing). The <em>Listen</em> buttons above are free but stop when the phone
-                screen locks.</p>
-              <button id="btn-make-audio" class="btn btn-primary" type="button">Create audio (MP3)</button>
+              <p id="audio-desc" class="preservation-subtitle">Turns the <strong>summary</strong> (or the key points, if that is all
+                you asked for) into an audio file you can play here or download to your phone. Uses OpenAI text-to-speech
+                (a fraction of a cent). The <em>Listen</em> buttons above are free but stop when the phone screen
+                locks.</p>
+              <button id="btn-make-audio" class="btn btn-primary" type="button">Create audio of the summary (MP3)</button>
               <p id="audio-status" class="source-hint" role="status" aria-live="polite"></p>
               <audio id="audio-player" class="audio-player hidden" controls preload="none"></audio>
               <a id="audio-download" class="btn btn-secondary hidden" download="briefing.mp3">Download MP3</a>

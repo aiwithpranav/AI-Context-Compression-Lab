@@ -224,7 +224,9 @@ export async function videoAsk({ url, media, question, history = [] }) {
 // ─── Audio briefing (OpenAI text-to-speech) ────────────────────────────────
 
 const TTS_CHUNK_CHARS = 3500;                 // the API accepts up to 4096 per request
-export const TTS_MAX_CHARS = 15_000;          // cost guard: about 10 minutes of speech
+export const TTS_MAX_CHARS = 15_000;          // summary briefing: about 10 minutes of speech
+export const FULL_AUDIO_MAX_CHARS = 45_000;   // whole video: about 45 minutes of speech (a cost guard)
+const TTS_PARALLEL = 4;                       // measured: one 3,500-character piece takes ~30 s to voice
 
 /** Split text at sentence ends into pieces the speech API accepts. */
 export function splitForSpeech(text, limit = TTS_CHUNK_CHARS) {
@@ -244,12 +246,56 @@ export function splitForSpeech(text, limit = TTS_CHUNK_CHARS) {
   return chunks;
 }
 
-/** Turn text into one MP3 (a listenable briefing, e.g. for a commute). */
+/** Run `fn` over `items` with at most `limit` in flight, keeping the results in order. */
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }));
+  return results;
+}
+
+/** Speak text as one MP3: split, voice the pieces in parallel, join them in order. */
+async function speakAll(text) {
+  const parts = await mapLimit(splitForSpeech(text), TTS_PARALLEL, chunk => openai.speak(chunk));
+  return Buffer.concat(parts);
+}
+
+/** Turn text into one MP3 (the summary briefing, for listening on the go). */
 export async function textToSpeech({ text }) {
   requireText();
   if (typeof text !== 'string' || !text.trim()) throw new LlmError('There is no text to turn into audio.', 400);
   if (text.length > TTS_MAX_CHARS) throw new LlmError(`That is too long for one audio file (over ${TTS_MAX_CHARS} characters). Use a shorter compression level.`, 413);
-  const parts = [];
-  for (const chunk of splitForSpeech(text)) parts.push(await openai.speak(chunk));
-  return Buffer.concat(parts);
+  return speakAll(text);
+}
+
+/**
+ * The whole video (or recording) as audio: Gemini writes down everything that is
+ * said, in full, and a voice reads it. The audio is about as long as the speech in
+ * the video — close to the original length, not identical, because it is a
+ * different voice. (The original audio track is not copied.)
+ * @returns {{ mp3: Buffer, chars: number }}
+ */
+export async function videoToAudio({ url, media }) {
+  requireVideo();
+  requireText();
+  const source = sourceFrom({ url, media });
+
+  const transcript = (await gemini.transcribe({
+    system: P.TRANSCRIBE_SYSTEM,
+    user: media ? 'Transcribe this recording.' : 'Transcribe this video.',
+    videoUrl: source.videoUrl, media: source.media,
+  })).trim();
+
+  if (/^NO SPEECH\.?$/i.test(transcript)) {
+    throw new LlmError('Nobody speaks in this video, so there is nothing to turn into audio.', 422);
+  }
+  if (transcript.length > FULL_AUDIO_MAX_CHARS) {
+    throw new LlmError(`This video has too much speech to convert (about ${Math.round(transcript.length / 15 / 60)} minutes of audio; the limit is about ${Math.round(FULL_AUDIO_MAX_CHARS / 15 / 60)}). Try a shorter video.`, 413);
+  }
+  return { mp3: await speakAll(transcript), chars: transcript.length };
 }

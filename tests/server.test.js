@@ -281,6 +281,40 @@ test('POST /api/tts validates input and needs JSON and the OpenAI key', async ()
   }
 });
 
+// ─── The whole video as audio (route) ──────────────────────────────────────
+
+test('POST /api/video/audio returns the whole video as an MP3', async () => {
+  const res = await postJson('/api/video/audio', { url: 'https://youtu.be/dQw4w9WgXcQ' });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'audio/mpeg');
+  assert.ok(Number(res.headers.get('x-transcript-chars')) > 0);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  assert.equal(bytes.subarray(0, 3).toString(), 'ID3');
+  assert.equal(Number(res.headers.get('content-length')), bytes.length);
+});
+
+test('POST /api/video/audio validates and is local-only', async () => {
+  assert.equal((await postJson('/api/video/audio', { url: 'nope' })).status, 400);
+  assert.equal((await fetch(base + '/api/video/audio')).status, 405);
+  assert.equal((await fetch(base + '/api/video/audio', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' })).status, 415);
+  const host = `127.0.0.1:${server.address().port}`;
+  assert.equal(await rawRequest({ Host: host, Origin: 'https://evil.example.com' }, '/api/video/audio', 'POST'), 403);
+});
+
+test('POST /api/video/audio needs both keys', async () => {
+  for (const key of ['OPENAI_API_KEY', 'GEMINI_API_KEY']) {
+    const saved = process.env[key];
+    delete process.env[key];
+    try {
+      const res = await postJson('/api/video/audio', { url: 'https://youtu.be/dQw4w9WgXcQ' });
+      assert.equal(res.status, 503);
+      assert.match((await res.json()).error, new RegExp(key));
+    } finally {
+      process.env[key] = saved;
+    }
+  }
+});
+
 // ─── YouTube caption time units (regression: a 59-second video showed hours) ─
 
 test('caption times in milliseconds are converted, even for a short video', () => {

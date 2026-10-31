@@ -302,17 +302,13 @@
 
   // ─── Audio briefing (listen on the go) ────────────────────────────────────
 
-  /** The text that gets spoken: summary, then key points, then action items. */
-  function _briefingText(results) {
-    const parts = [];
-    if (results.summary) parts.push('Summary. ' + results.summary);
+  /** What the card's button speaks: the summary — or the key points, if the summary was not asked for. */
+  function _summaryAudioText(results) {
+    if (results.summary) return results.summary;
     if (results.keyPoints && results.keyPoints.length > 0) {
-      parts.push('Key points. ' + results.keyPoints.map((p, i) => `${i + 1}. ${p}`).join(' '));
+      return results.keyPoints.map((p, i) => `${i + 1}. ${p}`).join(' ');
     }
-    if (results.actions && results.actions.length > 0) {
-      parts.push('Decisions and action items. ' + results.actions.map((a, i) => `${i + 1}. ${a.text}`).join(' '));
-    }
-    return parts.join('\n\n');
+    return '';
   }
 
   async function _makeAudio() {
@@ -320,8 +316,10 @@
     if (!results) return;
     UI.setAudioBusy(true);
     try {
-      const blob = await LLMClient.tts(_briefingText(results));
-      UI.showAudio(blob, `briefing-${new Date().toISOString().slice(0, 10)}.mp3`);
+      const text = _summaryAudioText(results);
+      if (!text) throw new Error('There is no summary to turn into audio yet.');
+      const blob = await LLMClient.tts(text);
+      UI.showAudio(blob, `summary-${new Date().toISOString().slice(0, 10)}.mp3`);
     } catch (err) {
       UI.showAudioError(err.message);
     } finally {
@@ -470,34 +468,26 @@
     };
     btnGemini.addEventListener('click', summarizeVideo);
 
-    // Audio: watch the video, then make the MP3 briefing in the same click.
-    // If this link was already summarised at this level, the summary is reused (no second Gemini call).
+    // Audio: the WHOLE video as audio (everything said, read aloud) — not a summary.
     const btnVideoAudio = document.getElementById('btn-video-audio');
     const videoToAudio = async () => {
       const url = urlInput.value.trim();
       if (!url) { _setStatus('Paste a YouTube link first.', true); return; }
-      const reason = LLMClient.textUnavailableReason() ? 'Audio needs an OpenAI key. ' + LLMClient.textUnavailableReason() : LLMClient.videoUnavailableReason();
+      const textReason = LLMClient.textUnavailableReason();
+      const reason = textReason ? 'Audio needs an OpenAI key. ' + textReason : LLMClient.videoUnavailableReason();
       if (reason) { _setStatus(reason, true); return; }
       _setStatus('');
 
-      const prev = AppState.get('results');
-      const reuse = _activeVideo && _activeVideo.url === url && prev
-        && prev.engine === 'video' && prev.mode === 'both' && prev.level === _getSelectedLevel();
-
       btnGemini.disabled = true;
       UI.setVideoAudioBusy(true);
+      AppState.setMode('audio');
+      AppState.startProcessing('fullaudio');
+      await _nextFrame();
       try {
-        if (!reuse) {
-          document.getElementById('input-textarea').value = '';   // the video is the source now
-          AppState.setInputText('');
-          UI.updateLiveStats('');
-          Transcript.reset();
-          await _discardRecording();
-          await runVideoCompression('both', { url });
-        }
-        if (!AppState.get('results')) return;                    // error already shown
-        await _makeAudio();
-        UI.scrollToAudio();
+        const blob = await LLMClient.videoAudio({ url });
+        UI.showFullAudio(blob, `video-audio-${new Date().toISOString().slice(0, 10)}.mp3`);
+      } catch (err) {
+        AppState.setError(err && err.message ? err.message : 'Could not turn this video into audio.');
       } finally {
         btnGemini.disabled = false;
         UI.setVideoAudioBusy(false);

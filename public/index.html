@@ -137,7 +137,8 @@
           </div>
           <p id="video-hint" class="source-hint">Gemini watches the video itself (speech and on-screen content), then
             you can ask it questions. Public videos only. "Captions only" loads the transcript into the box below
-            instead, and works offline with the extractive engine.</p>
+            instead, and works offline with the extractive engine. Press <strong>Audio</strong> (below) to go straight from
+            the link to an MP3 briefing you can listen to.</p>
         </div>
 
         <div id="source-file" class="source-panel hidden">
@@ -273,6 +274,12 @@
                 </svg>
               </span>
               Summary + Key Points
+            </button>
+            <button id="btn-audio" class="btn btn-audio" type="button"
+              aria-label="Summarise and create an audio file you can listen to"
+              title="Summarises, then creates an MP3 you can play or download (needs an OpenAI key)">
+              <span class="btn-icon" aria-hidden="true">🎧</span>
+              Audio
             </button>
           </div>
           <div class="actions-secondary">

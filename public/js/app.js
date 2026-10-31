@@ -312,6 +312,49 @@
     return parts.join('\n\n');
   }
 
+  /**
+   * The Audio button: summarise (summary + key points + action items) and then
+   * create the MP3, in one click — for text, documents, transcripts, recordings,
+   * and for a YouTube link typed into the Video tab (no separate "Summarize"
+   * step needed). If the current input was already summarised that way with the
+   * same engine and level, the existing result is reused, so a video is not
+   * sent to Gemini twice.
+   */
+  async function runAudioSummary() {
+    const reason = LLMClient.textUnavailableReason();
+    if (reason) { AppState.setError('The Audio button needs an OpenAI key. ' + reason); return; }
+
+    const text = AppState.get('inputText').trim();
+    const level = _getSelectedLevel();
+    const engine = _getEngine();
+    const prev = AppState.get('results');
+
+    // A YouTube link typed in the Video tab, not summarised yet (or a different link)
+    const videoTabOpen = !document.getElementById('source-video').classList.contains('hidden');
+    const typedUrl = document.getElementById('video-url').value.trim();
+    if (!text && videoTabOpen && typedUrl && !(_activeVideo && _activeVideo.url === typedUrl)) {
+      const videoReason = LLMClient.videoUnavailableReason();
+      if (videoReason) { _setStatus(videoReason, true); return; }
+      _setStatus('');
+      await _discardRecording();
+      Transcript.reset();
+      await runVideoCompression('both', { url: typedUrl });
+      if (!AppState.get('results')) return;     // error already shown
+      await _makeAudio();
+      UI.scrollToAudio();
+      return;
+    }
+
+    const sameInput = prev && prev.mode === 'both' && prev.level === level
+      && (_activeVideo && !text ? prev.engine === 'video' : prev.engine === engine && prev.originalText === text);
+
+    if (!sameInput) await runCompression('both');
+    if (!AppState.get('results')) return;       // validation or provider error: already shown
+
+    await _makeAudio();
+    UI.scrollToAudio();
+  }
+
   async function _makeAudio() {
     const results = AppState.get('results');
     if (!results) return;
@@ -360,6 +403,7 @@
     if (btnSummary)   btnSummary.addEventListener('click',   () => runCompression('summary'));
     if (btnKeyPoints) btnKeyPoints.addEventListener('click', () => runCompression('keypoints'));
     if (btnBoth)      btnBoth.addEventListener('click',      () => runCompression('both'));
+    document.getElementById('btn-audio')?.addEventListener('click', runAudioSummary);
   }
 
   // ─── Video / Transcript Sources ──────────────────────────────────────────

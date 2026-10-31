@@ -25,7 +25,7 @@ LLMs read **tokens**, and every model has a **context window**. Long documents, 
 | **Meeting recording** (`.mp3` `.m4a` `.wav` `.mp4` `.mov` `.webm`, ≤ 200 MB) | Gemini **listens** and returns a summary, key points and action items with timestamps; ask it questions. Zoom and Google Meet **links** are private, so download the recording and upload the file (or upload the `.vtt` transcript). The file is deleted from Gemini on Clear or tab close. |
 | **Captions only** | Alternative to Gemini for a YouTube link: loads the caption track as text, so it works with any engine, including offline. |
 
-Also: **Listen on the go** — an **MP3 audio briefing** (summary, key points, action items) made with OpenAI text-to-speech, to play or download and listen to on a phone, for example while driving; **Listen** (free browser voice, reads the summary aloud), **exact token counts**, an **Engine Comparison** table, and an **LLM evaluation** ("Did the meaning survive?").
+Also: the **Audio** button next to Summary / Key Points goes **straight from a link, text, document or recording to an MP3** in one click, and **Listen on the go** — an **MP3 audio briefing** (summary, key points, action items) made with OpenAI text-to-speech, to play or download and listen to on a phone, for example while driving; **Listen** (free browser voice, reads the summary aloud), **exact token counts**, an **Engine Comparison** table, and an **LLM evaluation** ("Did the meaning survive?").
 
 ---
 

@@ -20,6 +20,7 @@ const UI = (() => {
       btnSummary:            document.getElementById('btn-summary'),
       btnKeyPoints:          document.getElementById('btn-keypoints'),
       btnBoth:               document.getElementById('btn-both'),
+      btnAudio:              document.getElementById('btn-audio'),
       btnClear:              document.getElementById('btn-clear'),
       btnTryAgain:           document.getElementById('btn-try-again'),
       processingSection:     document.getElementById('processing-section'),
@@ -473,6 +474,20 @@ const UI = (() => {
   function setAudioAvailable(available, reason) {
     _audioAvailable = available;
     _audioUnavailableReason = reason || '';
+    _syncAudioButton(false);
+  }
+
+  /** The main Audio button needs the OpenAI key, and is also off while something is running. */
+  function _syncAudioButton(busy) {
+    if (!els.btnAudio) return;
+    els.btnAudio.disabled = busy || !_audioAvailable;
+    els.btnAudio.title = _audioAvailable
+      ? 'Summarises, then creates an MP3 you can play or download'
+      : 'Needs an OpenAI key. ' + _audioUnavailableReason;
+  }
+
+  function scrollToAudio() {
+    if (els.audioCard) els.audioCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function _revokeAudio() {
@@ -493,6 +508,7 @@ const UI = (() => {
 
   function setAudioBusy(busy) {
     if (els.btnMakeAudio) els.btnMakeAudio.disabled = busy || !_audioAvailable;
+    _syncAudioButton(busy);
     if (els.audioStatus) {
       els.audioStatus.classList.remove('source-status--error');
       els.audioStatus.textContent = busy ? 'Creating the audio… this takes a few seconds.' : els.audioStatus.textContent;
@@ -770,6 +786,7 @@ const UI = (() => {
     [els.btnSummary, els.btnKeyPoints, els.btnBoth, els.btnClear, els.btnTryAgain].forEach(btn => {
       if (btn) btn.disabled = disabled;
     });
+    _syncAudioButton(disabled);
   }
 
   // ─── Public Init ─────────────────────────────────────────────────────────
@@ -844,6 +861,7 @@ const UI = (() => {
     renderResults,
     renderComparison,
     setAudioAvailable,
+    scrollToAudio,
     resetAudio,
     setAudioBusy,
     showAudio,

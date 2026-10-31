@@ -1642,3 +1642,12 @@ a.kp-time:hover { background: var(--color-brand-medium); }
 /* ── 23. AUDIO BRIEFING ────────────────────────────────────────── */
 .audio-player { display: block; width: 100%; margin: var(--space-3) 0; }
 #audio-download { display: inline-flex; text-decoration: none; margin-top: var(--space-2); }
+
+/* The Audio button: same weight as the other actions, tinted green like the MP3 badge */
+.btn-audio {
+  background: var(--color-success-light);
+  color: var(--color-success);
+  border: 1px solid var(--color-success-bg);
+}
+.btn-audio:hover:not(:disabled) { background: var(--color-success-bg); }
+.btn-audio:disabled { opacity: 0.55; cursor: not-allowed; }

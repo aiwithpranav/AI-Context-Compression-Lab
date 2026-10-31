@@ -42,6 +42,6 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Only front-end files are served; `.env` is git-ignored. See `docs/SECURITY.md`.
 
 ### Known issues
-- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries and the OpenAI text flow. Not yet: video Q&A and the LLM evaluation (`docs/TEST_PLAN.md`, MT-3 and MT-7).
+- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries, a video question-and-answer round and the OpenAI text flow. Not yet: the LLM evaluation (MT-3) and the unanswerable-question and multi-turn parts of MT-7 (`docs/TEST_PLAN.md`).
 - `npm audit` reports moderate advisories via `exceljs` → `uuid`; the affected code path is not used (see `docs/SECURITY.md`).
 - No license file yet; `package.json` declares ISC by default and the owner should confirm.

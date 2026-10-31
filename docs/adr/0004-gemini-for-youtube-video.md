@@ -14,7 +14,7 @@ Use the Gemini API, which accepts a public YouTube URL as input. Request low med
 − Public videos only; subject to free-tier limits (daily video hours, per-minute quota) and to Google's data-use terms for free usage.
 − Requires a separate key from the text provider.
 − Source text is unavailable, so keyword coverage and the QA evaluation do not apply to videos.
-− Field-verified so far: video summaries on two real videos (19 s and 14 min) with a free-tier key. The follow-up question flow (`/api/video/ask`) has only been exercised against a fake API — see TEST_PLAN section 3.
+− Field-verified so far: video summaries on two real videos (19 s and 14 min) with a free-tier key. A real question-and-answer round was also confirmed working by the maintainer; unanswerable questions and long multi-turn chats are still only covered by the fake API — see TEST_PLAN section 3.
 
 ## Measurement behind the model choice
 Same 19-second public video, real free-tier key, October 2026:

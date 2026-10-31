@@ -35,7 +35,7 @@ Run everything: `npm test` (72 tests, no API keys, no network, no cost).
 
 ## 3. Not covered by automated tests
 
-- **Real OpenAI and Gemini behaviour.** Fakes prove our handling of well-formed and failing responses; they cannot prove the real APIs accept our requests today, or that the models' summaries are good. Checked by hand with real keys so far: Gemini video summaries (two videos, see ADR-0004) and the OpenAI text flow. *Still unchecked: video Q&A, the LLM evaluation, and anything that depends on provider load.*
+- **Real OpenAI and Gemini behaviour.** Fakes prove our handling of well-formed and failing responses; they cannot prove the real APIs accept our requests today, or that the models' summaries are good. Checked by hand with real keys so far: Gemini video summaries (two videos, see ADR-0004), a video question-and-answer round (maintainer-reported) and the OpenAI text flow. *Still unchecked: the LLM evaluation, how unanswerable questions and multi-turn context behave, and anything that depends on provider load.*
 - Browser UI behaviour beyond what was exercised by hand (no end-to-end browser tests yet).
 - Text-to-speech voices (depend on browser and OS).
 - Cross-browser rendering; mobile layouts.

@@ -18,7 +18,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - 95 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
 
 - **Meeting recordings**: upload an MP3, M4A, WAV, MP4, MOV or WEBM (up to 200 MB); Gemini listens, then returns a summary, key points and action items with timestamps, and answers questions about it. The uploaded file is deleted on Clear or tab close (FR-15, ADR-0008).
-- **Audio button** beside Summary / Key Points / Summary + Key Points: one click from a YouTube link (or text, document, recording) to an MP3 briefing; an existing summary of the same input is reused instead of calling the model again.
+- **🎧 Audio** button in the Video Link tab, beside *Summarize with Gemini* and *Captions only*: one click from a YouTube link to an MP3 briefing, or choose *Summarize with Gemini* for the text summary only. An existing summary of the same link and level is reused instead of calling Gemini again.
 - **Audio briefing**: create an MP3 of the summary, key points and action items with OpenAI text-to-speech; play it or download it to listen on a phone, for example while driving (FR-16, ADR-0008).
 
 ### Changed

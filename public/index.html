@@ -134,11 +134,14 @@
               placeholder="https://www.youtube.com/watch?v=..." aria-label="YouTube video link" />
             <button id="btn-video-gemini" class="btn btn-primary" type="button">Summarize with Gemini</button>
             <button id="btn-fetch-video" class="btn btn-secondary" type="button">Captions only</button>
+            <button id="btn-video-audio" class="btn btn-audio" type="button"
+              title="Gemini watches the video, then you get an MP3 briefing to play or download (needs both keys)">🎧 Audio</button>
           </div>
-          <p id="video-hint" class="source-hint">Gemini watches the video itself (speech and on-screen content), then
-            you can ask it questions. Public videos only. "Captions only" loads the transcript into the box below
-            instead, and works offline with the extractive engine. Press <strong>Audio</strong> (below) to go straight from
-            the link to an MP3 briefing you can listen to.</p>
+          <p id="video-hint" class="source-hint">Choose what you want from the link. <strong>Summarize with Gemini</strong> reads
+            the whole video (speech and on-screen content) and gives you the summary and key points, and you can ask it
+            questions. <strong>🎧 Audio</strong> does the same and then turns it into an MP3 briefing you can listen to
+            or download, for example while driving. <strong>Captions only</strong> loads the transcript as text. Public
+            videos only.</p>
         </div>
 
         <div id="source-file" class="source-panel hidden">
@@ -274,12 +277,6 @@
                 </svg>
               </span>
               Summary + Key Points
-            </button>
-            <button id="btn-audio" class="btn btn-audio" type="button"
-              aria-label="Summarise and create an audio file you can listen to"
-              title="Summarises, then creates an MP3 you can play or download (needs an OpenAI key)">
-              <span class="btn-icon" aria-hidden="true">🎧</span>
-              Audio
             </button>
           </div>
           <div class="actions-secondary">

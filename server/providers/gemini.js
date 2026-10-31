@@ -18,33 +18,84 @@ export const ready = () => Boolean(apiKey());
 const baseUrl = () => process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
 
 // ─── Model selection ───────────────────────────────────────────────────────
-// Model names and free-tier availability change often. Use GEMINI_MODEL if set,
-// otherwise pick the newest plain "flash" model the key can use.
+// Names, availability and speed change often, and the newest model is usually the
+// most overloaded (measured: a 19-second video took 190 s on the newest flash model,
+// which answered "high demand", versus ~7 s on the flash-lite alias). So the default
+// is speed-first, and a failing model falls through to the next candidate.
+// GEMINI_MODEL pins one model and disables the fallback.
 
-const FALLBACK_MODEL = 'gemini-2.5-flash';
-let _model = null;
+const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
+const MAX_CANDIDATES = 3;
 
-export function resetCache() { _model = null; }
+let _candidates = null;   // ranked model ids, discovered once
+let _model = null;        // the model that last answered successfully
 
-/** The model name if already known (set by env or discovered), else null. */
+export function resetCache() { _candidates = null; _model = null; }
+
+/** The model that last answered (or the pinned one), else null before the first call. */
 export function knownModel() { return process.env.GEMINI_MODEL || _model; }
 
-export async function model() {
-  if (process.env.GEMINI_MODEL) return process.env.GEMINI_MODEL;
-  if (_model) return _model;
-  try {
-    const data = await request('models?pageSize=200', { method: 'GET' });
-    const candidates = (data.models || [])
-      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-      .map(m => String(m.name).replace(/^models\//, ''))
-      .map(id => ({ id, match: id.match(/^gemini-(\d+(?:\.\d+)?)-flash$/) }))
-      .filter(c => c.match)
-      .sort((a, b) => Number(b.match[1]) - Number(a.match[1]));
-    _model = candidates[0]?.id || FALLBACK_MODEL;
-  } catch {
-    _model = FALLBACK_MODEL;
+/**
+ * Order model ids by "fast and stable first":
+ *   1. gemini-flash-lite-latest  2. gemini-flash-latest
+ *   3. gemini-N-flash-lite (newest N first)  4. gemini-N-flash (newest N first)
+ * Previews, image/audio/live/omni models and anything else are left out.
+ */
+export function rankModels(ids) {
+  const key = (id) => {
+    if (id === 'gemini-flash-lite-latest') return [0, 0];
+    if (id === 'gemini-flash-latest') return [1, 0];
+    const m = id.match(/^gemini-(\d+(?:\.\d+)?)-flash(-lite)?$/);
+    return m ? [m[2] ? 2 : 3, -Number(m[1])] : null;
+  };
+  return ids
+    .map(id => ({ id, k: key(id) }))
+    .filter(x => x.k)
+    .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1])
+    .map(x => x.id);
+}
+
+async function candidates() {
+  if (process.env.GEMINI_MODEL) return [process.env.GEMINI_MODEL];
+  if (!_candidates) {
+    try {
+      const data = await request('models?pageSize=200', { method: 'GET', timeoutMs: 20000 });
+      const ids = (data.models || [])
+        .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+        .map(m => String(m.name).replace(/^models\//, ''));
+      const ranked = rankModels(ids).slice(0, MAX_CANDIDATES);
+      _candidates = ranked.length ? ranked : FALLBACK_MODELS;
+    } catch {
+      _candidates = FALLBACK_MODELS;
+    }
   }
-  return _model;
+  return _candidates;
+}
+
+/** The model to use for follow-up calls (token counting): the last good one, else the first candidate. */
+export async function model() {
+  return knownModel() || (await candidates())[0];
+}
+
+// Overloaded, retired, rate-limited or too slow: another model may still work.
+const FALL_THROUGH = new Set([404, 429, 500, 503, 504]);
+
+async function withFallback(fn) {
+  const list = await candidates();
+  // Try the model that worked last time first.
+  const order = _model && list.includes(_model) ? [_model, ...list.filter(m => m !== _model)] : list;
+  let lastError;
+  for (const m of order) {
+    try {
+      const result = await fn(m);
+      _model = m;
+      return result;
+    } catch (err) {
+      if (!(err instanceof GeminiHttpError) || !FALL_THROUGH.has(err.upstreamStatus)) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError;
 }
 
 // ─── HTTP ──────────────────────────────────────────────────────────────────
@@ -74,18 +125,28 @@ function httpError(status, data) {
   if (status === 400) {
     return new GeminiHttpError(`Gemini could not process this request${msg ? `: ${msg}` : ''}`, 400, status, msg);
   }
+  if (status === 503 || status === 500) {
+    return new GeminiHttpError('Gemini is overloaded right now. Wait a minute and try again.', 503, status, msg);
+  }
   return new GeminiHttpError(`Gemini API error (${status}).`, 502, status, msg);
 }
 
-async function request(path, { method = 'POST', body } = {}) {
+// Generous: a long video can genuinely take a while, but nothing should hang for minutes.
+const GENERATE_TIMEOUT_MS = 150_000;
+
+async function request(path, { method = 'POST', body, timeoutMs = 30_000 } = {}) {
   let res;
   try {
     res = await fetch(`${baseUrl()}/${path}`, {
       method,
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey() },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch {
+  } catch (err) {
+    if (err && err.name === 'TimeoutError') {
+      throw new GeminiHttpError('Gemini took too long to respond. Try again, or try a shorter video.', 504, 504, 'timeout');
+    }
     throw new LlmError('Could not reach the Gemini API.', 502);
   }
   const data = await res.json().catch(() => null);
@@ -133,8 +194,7 @@ function parseJsonText(text) {
 
 const videoPart = (url) => ({ fileData: { fileUri: url } });
 
-async function generate({ system, contents, schema, lowResolution = false }) {
-  const m = await model();
+async function generateWith(m, { system, contents, schema, lowResolution }) {
   const path = `models/${m}:generateContent`;
   const base = { systemInstruction: { parts: [{ text: system }] }, contents };
 
@@ -150,7 +210,7 @@ async function generate({ system, contents, schema, lowResolution = false }) {
   };
 
   try {
-    return readResponse(await request(path, { body: full }));
+    return readResponse(await request(path, { body: full, timeoutMs: GENERATE_TIMEOUT_MS }));
   } catch (err) {
     // Some models reject a schema keyword or media setting. Retry with plain JSON mode,
     // moving the schema into the prompt so the shape is still requested.
@@ -162,7 +222,7 @@ async function generate({ system, contents, schema, lowResolution = false }) {
       systemInstruction: { parts: [{ text: `${system}\n\nReturn ONLY JSON matching this schema:\n${JSON.stringify(schema)}` }] },
       generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8192 },
     };
-    return readResponse(await request(path, { body: plain }));
+    return readResponse(await request(path, { body: plain, timeoutMs: GENERATE_TIMEOUT_MS }));
   }
 }
 
@@ -172,7 +232,8 @@ async function generate({ system, contents, schema, lowResolution = false }) {
  */
 export async function generateJson({ system, user, schema, videoUrl, lowResolution = false }) {
   const parts = [...(videoUrl ? [videoPart(videoUrl)] : []), { text: user }];
-  const { text, usage } = await generate({ system, contents: [{ role: 'user', parts }], schema, lowResolution });
+  const contents = [{ role: 'user', parts }];
+  const { text, usage } = await withFallback(m => generateWith(m, { system, contents, schema, lowResolution }));
   return { data: parseJsonText(text), usage: { inputTokens: usage.promptTokenCount ?? null } };
 }
 
@@ -189,16 +250,18 @@ export async function askVideo({ system, videoUrl, history = [], question }) {
   // History must start with the user turn that carries the video.
   if (contents[0].role !== 'user') contents.unshift({ role: 'user', parts: [videoPart(videoUrl), { text: 'Here is the video.' }] });
 
-  const m = await model();
-  const data = await request(`models/${m}:generateContent`, {
-    body: { systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { maxOutputTokens: 2048, mediaResolution: 'MEDIA_RESOLUTION_LOW' } },
-  }).catch(async (err) => {
-    if (err instanceof GeminiHttpError && err.upstreamStatus === 400 && /resolution|unknown name/i.test(err.upstreamMessage)) {
-      return request(`models/${m}:generateContent`, {
-        body: { systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { maxOutputTokens: 2048 } },
-      });
+  const body = (config) => ({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: config });
+
+  const data = await withFallback(async (m) => {
+    const path = `models/${m}:generateContent`;
+    try {
+      return await request(path, { body: body({ maxOutputTokens: 2048, mediaResolution: 'MEDIA_RESOLUTION_LOW' }), timeoutMs: GENERATE_TIMEOUT_MS });
+    } catch (err) {
+      if (err instanceof GeminiHttpError && err.upstreamStatus === 400 && /resolution|unknown name/i.test(err.upstreamMessage)) {
+        return request(path, { body: body({ maxOutputTokens: 2048 }), timeoutMs: GENERATE_TIMEOUT_MS });
+      }
+      throw err;
     }
-    throw err;
   });
   return readResponse(data).text;
 }

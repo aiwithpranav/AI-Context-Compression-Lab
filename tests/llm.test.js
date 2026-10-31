@@ -172,9 +172,21 @@ test('evaluate runs generate → answer → judge and scores the result', async 
 
 // ─── Video engine (Gemini) ─────────────────────────────────────────────────
 
-test('Gemini model is auto-picked: newest plain flash, not lite/pro/image', async () => {
-  assert.equal(await geminiProvider.model(), 'gemini-3.5-flash');
-  assert.equal(llm.status().video.model, 'gemini-3.5-flash');
+test('rankModels prefers fast, stable models and drops previews and non-text models', () => {
+  const ranked = geminiProvider.rankModels([
+    'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-pro',
+    'gemini-3.5-flash-image', 'gemini-3-flash-preview', 'gemini-omni-flash-preview',
+    'gemini-flash-latest', 'gemini-flash-lite-latest',
+  ]);
+  assert.deepEqual(ranked, [
+    'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.5-flash-lite',
+    'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-2.5-flash',
+  ]);
+});
+
+test('the default Gemini model is speed-first, not simply the newest', async () => {
+  await llm.videoAsk({ url: 'https://youtu.be/dQw4w9WgXcQ', question: 'hi' });
+  assert.equal(llm.status().video.model, 'gemini-flash-lite-latest');
 });
 
 test('videoCompress gives Gemini the YouTube URL and maps times and tokens', async () => {
@@ -209,12 +221,14 @@ test('video features say what to set when the Gemini key is missing', async () =
   }
 });
 
-test('Gemini free-tier limit gives a clear message', async () => {
-  geminiFake.failNext(429, 'quota exceeded');
-  await assert.rejects(
-    llm.videoAsk({ url: 'https://youtu.be/dQw4w9WgXcQ', question: 'hi' }),
-    (e) => e.httpStatus === 429 && /free-tier/i.test(e.message),
-  );
+test('Gemini free-tier limit (every model out of quota) gives a clear message', async () => {
+  const all = { 'gemini-flash-lite-latest': 429, 'gemini-flash-latest': 429, 'gemini-3.5-flash-lite': 429 };
+  await withFake({ failModels: all }, async () => {
+    await assert.rejects(
+      llm.videoAsk({ url: 'https://youtu.be/dQw4w9WgXcQ', question: 'hi' }),
+      (e) => e.httpStatus === 429 && /free-tier/i.test(e.message),
+    );
+  });
 });
 
 test('videoAsk attaches the video to the first turn and passes history through', async () => {
@@ -259,5 +273,73 @@ test('a rejected schema retries once in plain JSON mode', async () => {
     process.env.GEMINI_BASE_URL = saved;
     flaky.close();
     geminiProvider.resetCache();
+  }
+});
+
+// ─── Gemini model fallback ─────────────────────────────────────────────────
+
+async function withFake(options, fn) {
+  const fake = await fakeGemini(options);
+  const saved = process.env.GEMINI_BASE_URL;
+  process.env.GEMINI_BASE_URL = fake.url;
+  geminiProvider.resetCache();
+  try {
+    return await fn(fake);
+  } finally {
+    process.env.GEMINI_BASE_URL = saved;
+    fake.close();
+    geminiProvider.resetCache();
+  }
+}
+
+const modelOf = (req) => req.path.match(/models\/([^:]+):/)[1];
+const generateCalls = (fake) => fake.requests.filter(r => r.path.includes(':generateContent'));
+
+test('an overloaded model (503) falls through to the next one, and the winner is remembered', async () => {
+  await withFake({ failModels: { 'gemini-flash-lite-latest': 503 } }, async (fake) => {
+    const out = await llm.videoCompress({ url: 'https://youtu.be/dQw4w9WgXcQ', mode: 'summary', level: 'light' });
+    assert.deepEqual(generateCalls(fake).map(modelOf), ['gemini-flash-lite-latest', 'gemini-flash-latest']);
+    assert.equal(out.model, 'gemini-flash-latest');
+
+    fake.requests.length = 0;
+    await llm.videoAsk({ url: 'https://youtu.be/dQw4w9WgXcQ', question: 'next question' });
+    assert.deepEqual(generateCalls(fake).map(modelOf), ['gemini-flash-latest'], 'goes straight to the model that worked');
+  });
+});
+
+test('a retired model (404) and a quota error (429) also fall through', async () => {
+  await withFake({ failModels: { 'gemini-flash-lite-latest': 404, 'gemini-flash-latest': 429 } }, async (fake) => {
+    const out = await llm.videoCompress({ url: 'https://youtu.be/dQw4w9WgXcQ', mode: 'summary', level: 'light' });
+    assert.equal(generateCalls(fake).length, 3);
+    assert.equal(out.model, 'gemini-3.5-flash-lite');
+  });
+});
+
+test('when every candidate fails the user gets a clear message', async () => {
+  const all = { 'gemini-flash-lite-latest': 503, 'gemini-flash-latest': 503, 'gemini-3.5-flash-lite': 503 };
+  await withFake({ failModels: all }, async () => {
+    await assert.rejects(
+      llm.videoCompress({ url: 'https://youtu.be/dQw4w9WgXcQ', mode: 'summary', level: 'light' }),
+      (e) => e.httpStatus === 503 && /overloaded/i.test(e.message),
+    );
+  });
+});
+
+test('errors that another model cannot fix do not trigger a fallback', async () => {
+  await withFake({ failModels: { 'gemini-flash-lite-latest': 403 } }, async (fake) => {
+    await assert.rejects(llm.videoCompress({ url: 'https://youtu.be/dQw4w9WgXcQ', mode: 'summary', level: 'light' }), (e) => e.httpStatus === 403);
+    assert.equal(generateCalls(fake).length, 1);
+  });
+});
+
+test('GEMINI_MODEL pins one model and disables the fallback', async () => {
+  process.env.GEMINI_MODEL = 'gemini-3.8-flash';
+  try {
+    await withFake({ failModels: { 'gemini-3.8-flash': 503 } }, async (fake) => {
+      await assert.rejects(llm.videoCompress({ url: 'https://youtu.be/dQw4w9WgXcQ', mode: 'summary', level: 'light' }), /overloaded/i);
+      assert.deepEqual(generateCalls(fake).map(modelOf), ['gemini-3.8-flash']);
+    });
+  } finally {
+    delete process.env.GEMINI_MODEL;
   }
 });

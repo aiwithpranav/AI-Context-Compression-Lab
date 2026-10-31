@@ -33,7 +33,7 @@ Also: **Listen** (reads the summary aloud), **exact token counts**, an **Engine 
 | Job | Provider | Why |
 |---|---|---|
 | Text compression, evaluation | **OpenAI** (`gpt-4o-mini` by default) | Strict JSON-schema output. Set `OPENAI_MODEL` for another model. |
-| YouTube video summary + questions | **Gemini** (newest flash model your key can use) | Gemini accepts a YouTube URL directly as input, and has a free tier. |
+| YouTube video summary + questions | **Gemini** (`gemini-flash-lite-latest` first, with automatic fallback) | Gemini accepts a YouTube URL directly as input, and has a free tier. Speed-first: see below. |
 | Token counts | OpenAI's tokenizer, **locally** | Exact, free, needs no key. For videos, Gemini's own token counts. |
 | Offline baseline | TF-IDF extractive | No key, no network. Can't rewrite or hallucinate. |
 
@@ -95,7 +95,9 @@ Open <http://localhost:3000>.
 
 Both are optional. **Without any key** you still get the offline engine, document upload, transcripts, captions, exact token counts and Listen — the LLM options are greyed out with the reason. Opening `index.html` directly (no server) gives the offline engine and subtitle/text files only.
 
-Optional: `OPENAI_MODEL`, `GEMINI_MODEL` (default: auto-picks the newest flash model), `PORT`, `HOST` (default `127.0.0.1`), `ALLOWED_HOSTS` (extra hostnames, e.g. behind a reverse proxy).
+Optional: `OPENAI_MODEL`, `GEMINI_MODEL` (pins one model and turns off the fallback; default is speed-first with fallback), `PORT`, `HOST` (default `127.0.0.1`), `ALLOWED_HOSTS` (extra hostnames, e.g. behind a reverse proxy).
+
+**Gemini speed:** measured with a real free-tier key (Oct 2026): a 19-second video took about 6 s and a 14-minute talk about 27 s on `gemini-flash-lite-latest`; the newest flash model answered "high demand" and took 190 s. Speed varies with Google's load. For higher quality at lower speed, set `GEMINI_MODEL=gemini-flash-latest`.
 
 **Gemini free tier:** Google limits free usage (a few hours of YouTube video per day, plus per-minute limits) and may use free-tier inputs to improve its models. Public videos only. A 429 error means a limit was hit — wait and retry.
 
@@ -105,7 +107,7 @@ Optional: `OPENAI_MODEL`, `GEMINI_MODEL` (default: auto-picks the newest flash m
 npm test
 ```
 
-65 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
+71 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
 
 ---
 
@@ -118,7 +120,7 @@ npm test
 │   ├── llm.js                       Orchestrates providers: compress, evaluate, videoCompress, videoAsk
 │   ├── prompts.js                   Prompts, JSON schemas, pure helpers (provider-neutral)
 │   ├── providers/openai.js          Text engine + local tokenizer
-│   ├── providers/gemini.js          Video engine (REST), model auto-pick, schema retry
+│   ├── providers/gemini.js          Video engine (REST), model ranking + fallback, schema retry
 │   ├── extract.js                   PDF / DOCX / XLSX / CSV → text
 │   └── youtube.js                   Link parsing
 ├── js/                              Browser code
@@ -135,7 +137,7 @@ npm test
 
 - **Keys stay on the server, and the server stays local.** It listens on `127.0.0.1` only and rejects foreign `Host` / `Origin` headers and non-JSON posts, so other devices and other websites can't spend your keys. It has no login or rate limiting — don't expose it publicly. Uploads are processed in memory and not stored. Details: [docs/SECURITY.md](docs/SECURITY.md).
 - **Videos have no source text**, so keyword coverage and the QA evaluation don't apply to them; stats use Gemini's token counts (the "original" is the video's token count, which depends on video length and resolution — requests use low frame resolution to save tokens).
-- **Gemini is unverified here.** The free-tier models, YouTube-URL support and field names change; the model is auto-picked and the schema falls back to plain JSON. Very long videos may hit free-tier token limits.
+- **Gemini is only partly field-verified.** Video summaries were run against real videos; follow-up Q&A has not been run with a real key. The free-tier models, YouTube-URL support and field names change; the model is chosen speed-first (the newest model is often overloaded) and falls through to the next candidate on 503/404/429/timeouts, and the schema falls back to plain JSON. Very long videos may hit free-tier token limits.
 - **The evaluator is an LLM too.** It can be biased toward its own phrasing, and 8 questions is a small sample — a useful signal, not ground truth. Evaluation costs 3 calls, with the full original text sent twice.
 - **Documents:** scanned PDFs (images) need OCR and are not supported; old `.doc` / `.xls` must be re-saved as `.docx` / `.xlsx`. Spreadsheets are summarised as text rows, which suits the LLM engine better than the extractive one.
 - **YouTube captions** use the unofficial `youtube-transcript` package and can break without notice.

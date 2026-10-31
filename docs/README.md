@@ -22,4 +22,4 @@
 
 ## Honest status
 
-Everything that can be checked without real API keys is automated. The **OpenAI and Gemini integrations have been exercised only against fake APIs**; the first run with real keys is the manual checklist in `TEST_PLAN.md` (especially MT-6 and MT-7 for Gemini). Until then treat the LLM features as implemented but not yet field-verified.
+Everything that can be checked without real API keys is automated. Automated tests use **fake OpenAI and Gemini APIs**. Real-key checks so far: Gemini video summaries (19-second and 14-minute public videos, timings recorded in ADR-0004) and the OpenAI text flow, which the maintainer reported working. **Not yet checked with real keys:** video Q&A (MT-7), the LLM evaluation (MT-3), documents through the LLM engine, and long-running behaviour. See `TEST_PLAN.md`.

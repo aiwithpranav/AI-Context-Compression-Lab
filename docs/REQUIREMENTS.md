@@ -54,6 +54,7 @@ Priority: **M** = must, **S** = should.
 | **NFR-7** | Honesty | Heuristic metrics are labelled as such. Features that cannot apply (e.g. QA evaluation for a video with no source text) are hidden rather than shown with made-up numbers. |
 | **NFR-8** | Maintainability | No build step. Prompts and schemas are provider-neutral so a provider can be replaced without touching them. Behaviour is covered by automated tests that run without API keys. |
 | **NFR-9** | Compatibility | Current Chrome, Edge, Firefox and Safari 16.4+; Node.js 20.12 or newer on the server. |
+| **NFR-11** | Performance | A video summary should not stall on a single overloaded model: failing or slow (150 s) models are skipped automatically. Reference measurements, not guarantees: 19-second video ≈ 6 s, 14-minute talk ≈ 27 s (free tier, Oct 2026). |
 | **NFR-10** | Accessibility | Interactive controls are keyboard-reachable and labelled; status and results use ARIA live regions. |
 
 ## 5. Constraints and assumptions
@@ -80,5 +81,6 @@ Priority: **M** = must, **S** = should.
 | NFR-4 | — | `llm.test.js` (time validation) | — |
 | NFR-5 | — | `llm.test.js`, `server.test.js` (errors, malformed URL) | — |
 | NFR-6 | — | `client.test.js` (huge vocabulary) | — |
+| NFR-11 | ADR-0004 | `llm.test.js` (model ranking and fallback) | MT-6 (timing) |
 
 Items marked "real key required" are **not** verified by CI; they need the manual checks in the test plan.

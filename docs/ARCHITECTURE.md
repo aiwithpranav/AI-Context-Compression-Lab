@@ -90,7 +90,7 @@ sequenceDiagram
     Note over B: [M:SS] becomes a link to youtu.be/ID?t=seconds
 ```
 
-Model selection: `GEMINI_MODEL` if set, else the newest plain `gemini-N-flash` the key can list (cached), else a built-in fallback. If a model rejects the response schema or media-resolution setting, the call is retried once in plain JSON mode with the schema moved into the prompt.
+Model selection (ADR-0004): `GEMINI_MODEL` pins one model and disables the fallback. Otherwise the key's model list is ranked **speed-first** — `gemini-flash-lite-latest`, `gemini-flash-latest`, then `gemini-N-flash-lite` and `gemini-N-flash` by newest N, previews and non-text models excluded — and the top three become candidates. A candidate that answers 404, 429, 500, 503 or times out (150 s) hands over to the next; the one that succeeds is remembered for later calls. Other errors (bad key, private video, safety) are not retried. If a model rejects the response schema or media-resolution setting, the call is retried once in plain JSON mode with the schema moved into the prompt.
 
 ### 3.5 LLM evaluation
 

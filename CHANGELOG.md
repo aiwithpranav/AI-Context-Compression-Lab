@@ -15,7 +15,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - **LLM evaluation** ("Did the meaning survive?"): question-answering test plus unsupported-claim detection (FR-5, ADR-0005) and an **engine comparison** table (FR-6).
 - **Listen**: read the summary or key points aloud (FR-12).
 - Node server (`server.js`) holding API keys, fetching captions and parsing uploads (ADR-0001).
-- 65 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
+- 71 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
 
 ### Changed
 - Concept coverage: dropped the Jaccard term, scales the keyword set to text length, uses light stemming, and breaks ties by word length instead of position (ADR-0005).
@@ -25,6 +25,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Results show token counts without `~` when exact, and dashes instead of invented numbers when a value is unknown.
 
 ### Fixed
+- Video summaries could take minutes: the newest Gemini model was auto-picked and was overloaded (190 s for a 19-second video). The default is now speed-first with automatic fallback to the next model on 503/404/429/timeouts, and a 150 s timeout per attempt. Measured afterwards: 19-second video ≈ 6 s, 14-minute talk ≈ 27 s.
 - A 59-second video was shown as hours long: caption times in milliseconds were read as seconds. The unit is now chosen from the median caption duration.
 - Key points mapped to the wrong source sentence when two sentences were identical.
 - Very large inputs could overflow the call stack while ranking sentences.
@@ -40,6 +41,6 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Only front-end files are served; `.env` is git-ignored. See `docs/SECURITY.md`.
 
 ### Known issues
-- Gemini and OpenAI integrations are verified against fake APIs only; run the manual checks in `docs/TEST_PLAN.md` with real keys.
+- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries and the OpenAI text flow. Not yet: video Q&A and the LLM evaluation (`docs/TEST_PLAN.md`, MT-3 and MT-7).
 - `npm audit` reports moderate advisories via `exceljs` → `uuid`; the affected code path is not used (see `docs/SECURITY.md`).
 - No license file yet; `package.json` declares ISC by default and the owner should confirm.

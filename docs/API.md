@@ -132,11 +132,11 @@ Body: the **raw file bytes**. Only the extension of `name` is used: `.pdf`, `.do
   "actions": [{ "text": "…", "time": 5 }],
   "memoryTrick": { "type": "…", "text": "…", "explanation": "…" },
   "tokens": { "original": 4674, "compressed": 210 },
-  "model": "gemini-…-flash"
+  "model": "gemini-flash-lite-latest"
 }
 ```
 
-`tokens.original` is the **video's** token count (Gemini's prompt tokens minus our own prompt text); either value may be `null` if Gemini's counter failed. Times that are not valid clock times are returned as `null`. `503` if `GEMINI_API_KEY` is missing; `429` on free-tier limits; `400`/`403` for private or unavailable videos.
+`model` is the model that actually answered (it may be a fallback). `tokens.original` is the **video's** token count (Gemini's prompt tokens minus our own prompt text); either value may be `null` if Gemini's counter failed. Times that are not valid clock times are returned as `null`. `503` if `GEMINI_API_KEY` is missing; `429` on free-tier limits; `400`/`403` for private or unavailable videos.
 
 ## `POST /api/video/ask` *(Gemini)*
 
@@ -149,7 +149,7 @@ Body: the **raw file bytes**. Only the extension of `name` is used: `.pdf`, `.do
 ```
 
 ```json
-{ "answer": "Mixing happens first [0:12], then baking [1:05].", "model": "gemini-…-flash" }
+{ "answer": "Mixing happens first [0:12], then baking [1:05].", "model": "gemini-flash-lite-latest" }
 ```
 
 The video is attached to the first turn only. Entries in `history` with an unknown `role` or non-string `text` are ignored.

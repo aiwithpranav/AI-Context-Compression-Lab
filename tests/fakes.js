@@ -74,8 +74,10 @@ export async function fakeOpenAI() {
 /**
  * `rejectSchemaOnce` makes the first generateContent call fail with a schema
  * error, to exercise the plain-JSON retry.
+ * `failModels` maps a model id to an HTTP status it always answers with
+ * (e.g. { 'gemini-flash-lite-latest': 503 }), to exercise the model fallback.
  */
-export async function fakeGemini({ rejectSchemaOnce = false } = {}) {
+export async function fakeGemini({ rejectSchemaOnce = false, failModels = {} } = {}) {
   const requests = [];
   let rejected = false;
   let failure = null;
@@ -89,13 +91,19 @@ export async function fakeGemini({ rejectSchemaOnce = false } = {}) {
       return send({ error: { message: f.message } }, f.status);
     }
     if (req.url.startsWith('/v1beta/models?')) {
-      const names = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-pro', 'gemini-3.5-flash-image'];
+      const names = [
+        'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash',
+        'gemini-3.5-pro', 'gemini-3.5-flash-image', 'gemini-3-flash-preview', 'gemini-omni-flash-preview',
+        'gemini-flash-latest', 'gemini-flash-lite-latest',
+      ];
       return send({ models: names.map(n => ({ name: `models/${n}`, supportedGenerationMethods: ['generateContent'] })) });
     }
     if (req.url.includes(':countTokens')) {
       return send({ totalTokens: Math.ceil(body.contents[0].parts[0].text.length / 4) });
     }
     if (req.url.includes(':generateContent')) {
+      const model = req.url.match(/models\/([^:]+):/)?.[1];
+      if (failModels[model]) return send({ error: { message: `fake failure for ${model}` } }, failModels[model]);
       const cfg = body.generationConfig || {};
       if (rejectSchemaOnce && !rejected && cfg.responseSchema) {
         rejected = true;

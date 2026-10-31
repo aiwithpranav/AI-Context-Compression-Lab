@@ -1,0 +1,133 @@
+# Architecture
+
+Describes *how* the system satisfies [REQUIREMENTS.md](REQUIREMENTS.md). Decisions and their reasons are recorded as [ADRs](adr/).
+
+## 1. Context
+
+```mermaid
+flowchart LR
+    U[User in browser] -->|text, files, YouTube link| App[Context Compression Lab<br/>local Node server + web page]
+    App -->|text, prompts| OAI[(OpenAI API)]
+    App -->|YouTube URL, prompts| GEM[(Gemini API)]
+    App -->|caption request| YT[(YouTube captions)]
+```
+
+The system runs on the user's machine. The only external parties are the model providers and YouTube, and each receives data only when the user selects a feature that needs it.
+
+## 2. Components
+
+```mermaid
+flowchart TB
+    subgraph Browser
+        UI[index.html · ui.js · app.js]
+        EXT[Extractive engine<br/>textProcessor · summarizer · keyPoints]
+        MET[statistics · preservation]
+        TR[transcript.js<br/>VTT/SRT → timed chunks]
+        SP[speech.js]
+        CL[llmClient.js]
+    end
+    subgraph Server["Node server (server.js)"]
+        GUARD[Request guard<br/>host · origin · content type]
+        ROUTES[Routes]
+        LLM[server/llm.js<br/>orchestration]
+        PR[server/prompts.js<br/>prompts · schemas · pure helpers]
+        OP[providers/openai.js<br/>+ local tokenizer]
+        GP[providers/gemini.js<br/>REST]
+        EX[server/extract.js<br/>PDF · DOCX · XLSX · CSV]
+    end
+    UI --> EXT & MET & TR & SP
+    UI --> CL -->|fetch /api/*| GUARD --> ROUTES
+    ROUTES --> LLM --> PR
+    LLM --> OP & GP
+    ROUTES --> EX
+```
+
+| Layer | Responsibility | Never does |
+|---|---|---|
+| **Browser** | UI, offline engine, subtitle parsing, read-aloud, metrics display. | Hold an API key; call a provider directly. |
+| **Request guard** | Refuse anything not from the local page. | — |
+| **Routes** (`server.js`) | Validate input, call one function, map errors to HTTP statuses. | Contain prompts or provider details. |
+| **`llm.js`** | Combine prompts, providers and result mapping into five operations: `compress`, `evaluate`, `countTokens`, `videoCompress`, `videoAsk`. | Know provider wire formats. |
+| **`prompts.js`** | Prompts, JSON schemas, validation and mapping helpers. Pure functions. | Make network calls. |
+| **Providers** | One module per vendor: request shape, error translation, retries. Same return shape (`{ data, usage }`). | Contain business rules. |
+| **`extract.js`** | Bytes + filename → plain text. | Store files. |
+
+## 3. Key flows
+
+### 3.1 Text compression
+
+1. User pastes text, picks engine and level, presses a button.
+2. **Extractive:** the browser ranks sentences (TF-IDF + position), selects the top K in original order, picks diversity-filtered key points.
+3. **LLM:** `POST /api/compress` → `llm.compress` builds the system prompt (target length by level, key-point limit by level *and* length) and a strict JSON schema → OpenAI → typed result.
+4. Either way, the browser asks `POST /api/tokens` for exact counts (local tokenizer; estimate if the server is down) and computes the metrics.
+
+### 3.2 Transcripts and captions
+
+`.vtt/.srt` are parsed **in the browser** into segments, then grouped into ~8–30-word *chunks* that act as sentences and keep their start time. Captions have no punctuation, so normal sentence splitting would fail. Chunks are numbered (`[12] (3:41) …`) when sent to an LLM; the model returns the **line number** of each point, and the server maps it back to a real timestamp, so the model never invents one.
+
+YouTube captions come from `GET /api/transcript` (browsers cannot fetch them). The package returns milliseconds or seconds depending on the caption format; the server decides the unit from the **median caption duration**, not from the last timestamp (which misreads short videos).
+
+### 3.3 Documents
+
+`POST /api/extract?name=file.ext` receives the raw bytes (max 15 MB) → `extract.js` → text. PDF via `unpdf`, Word via `mammoth`, Excel via `exceljs` (rows rendered as `a | b | c`), CSV via a small parser. The text then enters the normal pipeline (3.1).
+
+### 3.4 Video with Gemini
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Server
+    participant G as Gemini
+    B->>S: POST /api/video/compress {url, mode, level}
+    S->>G: generateContent(fileData: YouTube URL, schema, low media resolution)
+    G-->>S: JSON {summary, key_points[{text,time}], action_items, memory_trick}
+    S->>G: countTokens(prompt), countTokens(summary)
+    S-->>B: result + token counts (video tokens = prompt tokens − our prompt)
+    B->>S: POST /api/video/ask {url, question, history}
+    S->>G: generateContent(video on first turn + history + question)
+    G-->>S: answer with [M:SS] citations
+    S-->>B: {answer}
+    Note over B: [M:SS] becomes a link to youtu.be/ID?t=seconds
+```
+
+Model selection: `GEMINI_MODEL` if set, else the newest plain `gemini-N-flash` the key can list (cached), else a built-in fallback. If a model rejects the response schema or media-resolution setting, the call is retried once in plain JSON mode with the schema moved into the prompt.
+
+### 3.5 LLM evaluation
+
+Three sequential calls to the text provider (see ADR-0005): (1) write questions with gold answers from the **original**; (2) answer them seeing **only the compressed text**; (3) grade, and list unsupported claims. Score = (correct + ½·partial) ÷ questions. Videos are excluded: there is no source text.
+
+## 4. Data handling
+
+| Data | Where it goes | Stored? |
+|---|---|---|
+| Pasted text / extracted document text | Browser → server → OpenAI (only if the LLM engine is chosen) | No |
+| Uploaded file bytes | Browser → server memory → parsed → discarded | No |
+| YouTube URL and questions | Browser → server → Gemini | No |
+| API keys | Server environment / `.env` (git-ignored) | Only on the user's disk |
+| Results | Browser memory | No (lost on reload) |
+
+## 5. Failure behaviour
+
+| Situation | Behaviour |
+|---|---|
+| No key for a provider | Related option disabled with the reason; routes answer `503` with instructions. |
+| Server not running | Offline engine, subtitle/text files and read-aloud still work; token counts fall back to estimates. |
+| Provider quota / rate limit | Friendly message (`429`); OpenAI SDK retries transient errors itself. |
+| Model refuses or truncates | `422` with a specific message. |
+| Model returns invalid JSON | `502`, "unreadable response, please retry". |
+| Invalid timestamp from a model | Dropped (no chip shown). |
+| Malformed HTTP request | `400`; server keeps running. |
+
+## 6. Technology choices
+
+| Choice | Reason |
+|---|---|
+| Vanilla JS, no bundler | Zero build step; easy to read and to run. |
+| Node `http` (no framework) | Few routes; fewer dependencies to audit. |
+| OpenAI SDK; Gemini via `fetch` | Official SDK where the API is stable; REST for Gemini keeps it dependency-free and lets tests redirect the base URL. |
+| `node:test` | Built in; no test framework dependency. |
+| `gpt-tokenizer` | Exact OpenAI token counts, offline. |
+
+## 7. Known limitations
+
+See README ("Design decisions and limitations") and [SECURITY.md](SECURITY.md). The most important: the Gemini integration has only been exercised against a fake API, and the server has no authentication — it is for local use.

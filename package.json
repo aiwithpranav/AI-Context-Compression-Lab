@@ -1,0 +1,40 @@
+{
+  "name": "ai-context-compression-lab",
+  "version": "1.0.0",
+  "description": "Compress text, documents and YouTube videos with LLMs and measure what meaning survives",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aiwithpranav/AI-Context-Compression-Lab.git"
+  },
+  "keywords": [
+    "llm",
+    "context-compression",
+    "summarization",
+    "openai",
+    "gemini",
+    "tokens"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/aiwithpranav/AI-Context-Compression-Lab/issues"
+  },
+  "homepage": "https://github.com/aiwithpranav/AI-Context-Compression-Lab#readme",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "gpt-tokenizer": "^4.1.0",
+    "mammoth": "^1.13.0",
+    "openai": "^7.46.0",
+    "unpdf": "^2.1.0",
+    "youtube-transcript": "^1.3.1"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20.12"
+  }
+}

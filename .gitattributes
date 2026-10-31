@@ -1,0 +1,7 @@
+# Keep line endings stable across Windows/macOS/Linux checkouts.
+* text=auto eol=lf
+
+# Binary fixtures used by the tests
+tests/fixtures/*.pdf binary
+tests/fixtures/*.docx binary
+tests/fixtures/*.xlsx binary

@@ -10,6 +10,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { fakeOpenAI, fakeGemini } from './fakes.js';
+import { checkNodeVersion } from '../server/runtime.js';
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const fixture = (name) => fs.readFileSync(path.join(fixtures, name));
@@ -313,6 +314,19 @@ test('POST /api/video/audio needs both keys', async () => {
       process.env[key] = saved;
     }
   }
+});
+
+// ─── Supported Node versions ────────────────────────────────────────────────
+
+test('the server refuses to start on a Node version the PDF library cannot run on', () => {
+  // Regression: on Node 20 the PDF library fails with "Iterator is not defined", which CI caught.
+  const old = checkNodeVersion('20.20.2');
+  assert.equal(old.ok, false);
+  assert.match(old.message, /needs Node\.js 22 or newer \(this is 20\.20\.2\)/);
+  assert.equal(checkNodeVersion('22.0.0').ok, true);
+  assert.equal(checkNodeVersion('24.11.1').ok, true);
+  assert.equal(checkNodeVersion('nonsense').ok, false);
+  assert.equal(checkNodeVersion(process.versions.node).ok, true, 'the Node running these tests is supported');
 });
 
 // ─── YouTube caption time units (regression: a 59-second video showed hours) ─

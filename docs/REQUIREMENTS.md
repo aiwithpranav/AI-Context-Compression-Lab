@@ -56,7 +56,7 @@ Priority: **M** = must, **S** = should.
 | **NFR-6** | Robustness | The offline engine must handle inputs up to 500,000 characters without freezing the page or exhausting the call stack. |
 | **NFR-7** | Honesty | Heuristic metrics are labelled as such. Features that cannot apply (e.g. QA evaluation for a video with no source text) are hidden rather than shown with made-up numbers. |
 | **NFR-8** | Maintainability | No build step. Prompts and schemas are provider-neutral so a provider can be replaced without touching them. Behaviour is covered by automated tests that run without API keys. |
-| **NFR-9** | Compatibility | Current Chrome, Edge, Firefox and Safari 16.4+; Node.js 20.12 or newer on the server. |
+| **NFR-9** | Compatibility | Current Chrome, Edge, Firefox and Safari 16.4+; Node.js 22 or newer on the server. |
 | **NFR-11** | Performance | A video summary should not stall on a single overloaded model: failing or slow (150 s) models are skipped automatically. Reference measurements, not guarantees: 19-second video ≈ 6 s, 14-minute talk ≈ 27 s (free tier, Oct 2026). |
 | **NFR-12** | Privacy | An uploaded recording leaves the machine only for Gemini, is not kept by this server, and is deleted from Gemini on Clear / tab close (Google also expires files after 48 hours). The user is told this before uploading. |
 | **NFR-13** | Cost control | Audio of a summary is capped (15,000 characters ≈ 10 minutes of speech), audio of a whole video at 45,000 characters (≈ 45 minutes), and recordings at 200 MB, so one click cannot run up an unbounded bill. |

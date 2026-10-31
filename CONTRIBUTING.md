@@ -11,7 +11,7 @@ npm start                # http://localhost:3000
 npm test                 # no keys needed
 ```
 
-Node 20.12 or newer. There is no build step.
+Node 22 or newer. There is no build step.
 
 ## Workflow
 
@@ -19,7 +19,7 @@ Node 20.12 or newer. There is no build step.
 2. **Branch** from `main`: `feat/<short-name>`, `fix/<short-name>`, `docs/<short-name>`, `chore/<short-name>`.
 3. **Write the test first for a bug fix** and list it in the regression table in `docs/TEST_PLAN.md`.
 4. **Keep commits focused**, using [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`.
-5. **Open a pull request** using the template. CI (`npm test` on Node 20 and 22) must pass.
+5. **Open a pull request** using the template. CI (`npm test` on Node 22 and 24) must pass.
 6. **Update docs** that your change affects: README, `docs/API.md`, `CHANGELOG.md` (under *Unreleased*), and an ADR if you made a decision that is hard to reverse.
 
 ## Repository layout

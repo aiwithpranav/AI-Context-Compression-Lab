@@ -18,7 +18,7 @@
 3. **Implementation** — small modules with one responsibility; provider-neutral prompts; no build step.
 4. **Verification** — automated tests that need no API keys, regression tests for every defect found, and a manual checklist for what fakes cannot prove (`TEST_PLAN.md`).
 5. **Security review** — threat list with mitigations and accepted risks (`SECURITY.md`); a secret scan before publishing.
-6. **Release** — CI on Node 20 and 22, changelog, exit criteria in the test plan.
+6. **Release** — CI on Node 22 and 24, changelog, exit criteria in the test plan.
 
 ## Honest status
 

@@ -29,12 +29,13 @@ import * as llm from './llm.js';
 import { extractFromFile, ExtractError } from './extract.js';
 import { extractVideoId } from './youtube.js';
 import { MAX_MEDIA_BYTES } from './prompts.js';
+import { checkNodeVersion } from './runtime.js';
 
 // Repository layout: public/ is everything the browser may load; server/ never is.
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
-// Load .env from the project root (Node 20.12+), whatever directory the server was started from.
+// Load .env from the project root, whatever directory the server was started from.
 // Real environment variables win.
 try { process.loadEnvFile(path.join(ROOT, '.env')); } catch { /* no .env — fine */ }
 const MAX_JSON_BYTES = 3_000_000;    // ~500k chars of text plus JSON overhead
@@ -316,6 +317,8 @@ export function createServer() {
 
 // Start listening only when run directly (`npm start`), not when imported by tests.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const runtime = checkNodeVersion();
+  if (!runtime.ok) { console.error(runtime.message); process.exit(1); }
   const PORT = process.env.PORT || 3000;
   // Loopback only by default: anyone who can reach this server can spend your API keys.
   const HOST = process.env.HOST || '127.0.0.1';

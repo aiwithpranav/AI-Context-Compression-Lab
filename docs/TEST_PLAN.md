@@ -65,7 +65,7 @@ Prerequisites: `npm start` with both keys in `.env`. Record results in the PR de
 
 ## 5. Exit criteria for a release
 
-1. `npm test` green on Node 20 and 22 (CI).
+1. `npm test` green on Node 22 and 24 (CI).
 2. Secret scan clean (no keys, no `.env` in the diff).
 3. MT-1 … MT-13 run with real keys, or the gaps stated in the release notes.
 4. `CHANGELOG.md` and affected docs updated.

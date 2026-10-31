@@ -15,7 +15,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - **LLM evaluation** ("Did the meaning survive?"): question-answering test plus unsupported-claim detection (FR-5, ADR-0005) and an **engine comparison** table (FR-6).
 - **Listen**: read the summary or key points aloud (FR-12).
 - Node server (`server/index.js`) holding API keys, fetching captions and parsing uploads (ADR-0001).
-- 112 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
+- 112 automated tests (no API keys needed), CI on Node 22 and 24, documentation set under `docs/`.
 
 - **Meeting recordings**: upload an MP3, M4A, WAV, MP4, MOV or WEBM (up to 200 MB); Gemini listens, then returns a summary, key points and action items with timestamps, and answers questions about it. The uploaded file is deleted on Clear or tab close (FR-15, ADR-0008).
 - **🎧 Audio** button in the Video Link tab, beside *Summarize with Gemini* and *Captions only*: turns the **whole video** into audio — Gemini writes out everything said, a voice reads it, in order — instead of a summary (FR-17, ADR-0009). The audio is close to the video's length but about 15 % shorter in a real 14-minute test, and the page shows its real length.
@@ -33,6 +33,8 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Results show token counts without `~` when exact, and dashes instead of invented numbers when a value is unknown.
 
 ### Fixed
+- CI now runs on every branch push (it only ran on `main`, so the Node 20 failure below was found after the merge).
+- **PDF upload failed on Node 20** ("Iterator is not defined" inside the PDF library); found by CI. The server now needs Node 22 or newer (Node 20 reached end of life in April 2026), says so at start-up instead of failing later, and CI runs on Node 22 and 24.
 - The page requested a missing `favicon.ico` on every load (a 404 in the console); it now has an inline icon.
 - Questions about a recording could be answered in another language (a real test answered an English question in Korean); the answer prompt now pins the question's language.
 - Video summaries could take minutes: the newest Gemini model was auto-picked and was overloaded (190 s for a 19-second video). The default is now speed-first with automatic fallback to the next model on 503/404/429/timeouts, and a 150 s timeout per attempt. Measured afterwards: 19-second video ≈ 6 s, 14-minute talk ≈ 27 s.

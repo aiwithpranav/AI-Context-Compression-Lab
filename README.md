@@ -111,7 +111,7 @@ Sentences are scored with TF-IDF plus a position boost, the top-K kept in origin
 
 ## Running it
 
-Requires Node 20.12+.
+Requires Node.js 22 or newer.
 
 ```bash
 npm install
@@ -140,7 +140,7 @@ Optional: `OPENAI_MODEL`, `OPENAI_TTS_MODEL`, `GEMINI_MODEL` (pins one model and
 npm test
 ```
 
-112 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
+112 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 22 and 24. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
 
 ---
 

@@ -30,6 +30,9 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Very large inputs could overflow the call stack while ranking sentences.
 - Unsupported file types were silently read as plain text.
 - Invalid model-supplied timestamps (for example `9:99:99`) were displayed.
+- The Summary card always said "Extractive", even for OpenAI and Gemini results; it now names the engine.
+- The Action Items hint said "keyword matching" for model-extracted items, and the evaluation card still named the old provider; both reworded.
+- Timestamp chips inside chat answers had excess spacing.
 
 ### Security
 - Server binds to `127.0.0.1` by default and rejects foreign `Host` / `Origin` headers and non-JSON content types (cross-site and DNS-rebinding protection).

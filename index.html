@@ -180,7 +180,7 @@
           </div>
         </div>
 
-        <!-- Engine Selector: offline extractive vs Claude -->
+        <!-- Engine Selector: offline extractive vs OpenAI -->
         <div class="compression-level-control" role="group" aria-labelledby="engine-control-label">
           <span id="engine-control-label" class="level-control-label">Compression Engine</span>
           <div class="level-options">
@@ -378,7 +378,7 @@
                 </div>
                 <h3 id="summary-heading" class="card-title">Summary</h3>
               </div>
-              <div class="card-badge">Extractive</div>
+              <div id="summary-badge" class="card-badge">Extractive</div>
             </div>
 
             <div class="card-body">
@@ -481,8 +481,8 @@
                   <tbody id="compare-body"></tbody>
                 </table>
               </div>
-              <p class="source-hint">Run the same text through both engines to compare them. Tokens are exact (Claude's
-                tokenizer) when the server has an API key, otherwise estimated (~). Keyword coverage penalises rewording,
+              <p class="source-hint">Run the same text through both engines to compare them. Tokens are exact (a real
+                tokenizer) when the server is running, otherwise estimated (~). Keyword coverage penalises rewording,
                 so a rewritten summary can score low there even when the meaning is intact — the QA score from the
                 evaluation below is the fairer comparison.</p>
             </div>
@@ -498,7 +498,7 @@
               <div class="card-badge card-badge--green">LLM-graded</div>
             </div>
             <div class="card-body">
-              <p class="preservation-subtitle">Claude writes questions from the <em>original</em> text, answers them
+              <p class="preservation-subtitle">The model writes questions from the <em>original</em> text, answers them
                 using <em>only the compressed text</em>, then grades the answers and flags anything the compressed text
                 claims that the original doesn't support. Unlike keyword coverage, this tests understanding.</p>
               <button id="btn-evaluate" class="btn btn-primary" type="button">Run evaluation</button>
@@ -539,8 +539,7 @@
             </div>
             <div class="card-body">
               <ul id="actions-list" class="keypoints-list" aria-label="Decisions and action items"></ul>
-              <p class="source-hint">Found by keyword matching (e.g. "we will", "deadline", "agreed"). Review before
-                relying on it.</p>
+              <p id="actions-hint" class="source-hint"></p>
             </div>
           </article>
 

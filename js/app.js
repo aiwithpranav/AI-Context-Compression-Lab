@@ -64,7 +64,7 @@
 
       const compressedText = _joinCompressed(out.summary, out.keyPoints);
 
-      // Exact Claude token counts when the server can provide them; otherwise an estimate.
+      // Exact token counts when the server is running; otherwise a local estimate.
       const exactTokens = await LLMClient.countTokens([text, compressedText]);
       const stats = Statistics.computeStats(text, compressedText, exactTokens);
       const preservation = Preservation.evaluatePreservation(text, compressedText);
@@ -121,7 +121,7 @@
     return { summary, keyPoints, keyPointTimes, actions, memoryTrick: null, model: null };
   }
 
-  /** LLM engine: abstractive compression by Claude, via our server. */
+  /** LLM engine: abstractive compression by OpenAI, via our server. */
   async function _compressWithLLM(text, mode, level, transcript) {
     const r = await LLMClient.compress({
       text, mode, level,

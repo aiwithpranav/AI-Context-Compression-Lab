@@ -148,6 +148,11 @@ const UI = (() => {
     // — Summary Card —
     if (mode === 'summary' || mode === 'both') {
       _renderSummaryCard(summary, stats);
+      const badge = document.getElementById('summary-badge');
+      if (badge) {
+        const label = { llm: 'Rewritten · OpenAI', video: 'Rewritten · Gemini' }[results.engine] || 'Extractive';
+        badge.textContent = label;
+      }
       _showCard(els.summaryCard);
     } else {
       _hideCard(els.summaryCard);
@@ -163,6 +168,12 @@ const UI = (() => {
 
     // — Action Items Card (only when a transcript was used and something was found) —
     if (actions && actions.length > 0) {
+      const hint = document.getElementById('actions-hint');
+      if (hint) {
+        hint.textContent = results.engine === 'extractive'
+          ? 'Found by keyword matching (for example "we will", "need to", "by Friday"). Review before relying on it.'
+          : 'Extracted by the model from the source. Review before relying on it.';
+      }
       _renderActionsCard(actions, videoId);
       _showCard(els.actionsCard);
     } else {
@@ -382,7 +393,7 @@ const UI = (() => {
 
   function setEvaluationBusy(busy) {
     if (els.btnEvaluate) els.btnEvaluate.disabled = busy;
-    if (els.evalStatus) els.evalStatus.textContent = busy ? 'Running 3 Claude calls: questions, answers, grading...' : '';
+    if (els.evalStatus) els.evalStatus.textContent = busy ? 'Running 3 model calls: questions, answers, grading...' : '';
     if (busy && els.evalResult) els.evalResult.innerHTML = '';
   }
 

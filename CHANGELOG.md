@@ -47,7 +47,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Only front-end files are served; `.env` is git-ignored. See `docs/SECURITY.md`.
 
 ### Known issues
-- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries, video and recording question-and-answer (including unanswerable and Marathi questions), recording upload and delete, MP3 briefings, and the OpenAI text flow. Whole-video audio was run with real keys on a 14-minute talk (transcription and one voiced piece) and end to end on a 19-second video. Not yet: a full 10-minute video voiced end to end, the LLM evaluation (MT-3), a long Zoom/Meet MP4, and listening on a phone with the screen locked (`docs/TEST_PLAN.md`).
+- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries, video and recording question-and-answer (including unanswerable and Marathi questions), recording upload and delete, MP3 briefings, and the OpenAI text flow. Whole-video audio was run with real keys on a 14-minute talk (transcription and one voiced piece) and end to end on a 19-second video, and the maintainer confirmed converting a real video to audio works. Not yet measured: the audio-to-video length ratio on a full-length video, the LLM evaluation (MT-3), a long Zoom/Meet MP4, and listening on a phone with the screen locked (`docs/TEST_PLAN.md`).
 - Speech recognition can mishear names (a test heard "Meera" as "Neira"); check action-item owners.
 - `npm audit` reports moderate advisories via `exceljs` → `uuid`; the affected code path is not used (see `docs/SECURITY.md`).
 - No license file yet; `package.json` declares ISC by default and the owner should confirm.

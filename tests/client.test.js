@@ -211,3 +211,32 @@ test('unknown original size shows dashes instead of fake numbers', () => {
   assert.equal(Statistics.formatTokens(null), '—');
   assert.equal(stats.tokensAreExact, false);
 });
+
+// ─── Moments cited in video answers ──────────────────────────────────────
+
+const refs = (text) => [...Transcript.splitTimeRefs(text)].map(p => ({ ...p }));
+
+test('square-bracket citations become link targets', () => {
+  const parts = refs('It starts at [0:12], then repeats [1:05].');
+  assert.deepEqual(parts.filter(p => p.seconds !== null).map(p => p.seconds), [12, 65]);
+  assert.equal(parts.map(p => p.text).join(''), 'It starts at [0:12], then repeats [1:05].', 'no text is lost');
+});
+
+test('round brackets and ranges are accepted, since models do not always follow the format', () => {
+  assert.deepEqual(refs('Two kinds (10:58).').filter(p => p.seconds !== null).map(p => p.seconds), [658]);
+  const range = refs('More dangerous [11:15-12:15] because…');
+  assert.deepEqual(range.filter(p => p.seconds !== null).map(p => p.seconds), [675, 735]);
+  assert.equal(range.map(p => p.text).join(''), 'More dangerous [11:15-12:15] because…');
+  assert.deepEqual(refs('See [1:05, 2:10].').filter(p => p.seconds !== null).map(p => p.seconds), [65, 130]);
+  assert.deepEqual(refs('At [1:02:03].').filter(p => p.seconds !== null).map(p => p.seconds), [3723]);
+});
+
+test('times outside brackets and non-times are left as plain text', () => {
+  assert.deepEqual(refs('The meeting is at 5:30 pm, see [note] and [10].').filter(p => p.seconds !== null), []);
+  assert.deepEqual(refs('plain text').map(p => p.text), ['plain text']);
+});
+
+test('cited moments are tagged so the page can drop the brackets around a link', () => {
+  const kinds = refs('See [1:05].').map(p => `${p.kind}:${p.text}`);
+  assert.deepEqual(kinds, ['text:See ', 'bracket:[', 'time:1:05', 'bracket:]', 'text:.']);
+});

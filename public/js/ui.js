@@ -634,27 +634,23 @@ const UI = (() => {
     els.chatLog.appendChild(row);
   }
 
-  /** Turn "[1:23]" in an answer into links that open the video at that moment. */
+  /** Turn cited moments ("[1:23]", "(10:58)", "[11:15-12:15]") into links that open the video there. */
   function _appendWithTimeLinks(parent, text, videoId) {
-    const pattern = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g;
-    let last = 0, m;
-    while ((m = pattern.exec(text)) !== null) {
-      parent.appendChild(document.createTextNode(text.slice(last, m.index)));
-      const sec = Transcript.parseTimestamp(m[1]);
-      if (sec !== null && videoId) {
+    for (const part of Transcript.splitTimeRefs(text)) {
+      // A linked moment is shown as a chip on its own; the brackets around it would only add noise.
+      if (part.kind === 'bracket' && videoId) continue;
+      if (part.seconds !== null && videoId) {
         const a = document.createElement('a');
         a.className = 'kp-time';
-        a.href = Transcript.timestampUrl(videoId, sec);
+        a.href = Transcript.timestampUrl(videoId, part.seconds);
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
-        a.textContent = m[1];
+        a.textContent = part.text;
         parent.appendChild(a);
       } else {
-        parent.appendChild(document.createTextNode(m[0]));
+        parent.appendChild(document.createTextNode(part.text));
       }
-      last = m.index + m[0].length;
     }
-    parent.appendChild(document.createTextNode(text.slice(last)));
   }
 
   /** role: 'user' | 'model' | 'error' */
@@ -690,6 +686,13 @@ const UI = (() => {
 
   // ─── Live Statistics (Input Counter) ────────────────────────────────────
 
+  let _liveTokenTimer = null;
+
+  /**
+   * Characters and words are instant. Tokens show a local estimate at once, then
+   * (if the server is running) the exact count a moment after typing stops, so the
+   * number here matches the one in the results.
+   */
   function updateLiveStats(text) {
     const chars  = Tokenizer.countChars(text);
     const words  = Tokenizer.countWords(text);
@@ -697,7 +700,23 @@ const UI = (() => {
 
     if (els.charCount)  els.charCount.textContent  = Tokenizer.formatNumber(chars);
     if (els.wordCount)  els.wordCount.textContent  = Tokenizer.formatNumber(words);
-    if (els.tokenCount) els.tokenCount.textContent = '~' + Tokenizer.formatNumber(tokens);
+    _showLiveTokens('~' + Tokenizer.formatNumber(tokens), 'Est. Tokens');
+
+    clearTimeout(_liveTokenTimer);
+    if (!text.trim() || !LLMClient.serverUp()) return;
+    _liveTokenTimer = setTimeout(async () => {
+      const exact = await LLMClient.countTokens([text]);
+      // Ignore the answer if the text changed while we waited
+      if (exact && els.textarea && els.textarea.value === text) {
+        _showLiveTokens(Tokenizer.formatNumber(exact[0]), 'Tokens');
+      }
+    }, 400);
+  }
+
+  function _showLiveTokens(value, label) {
+    if (els.tokenCount) els.tokenCount.textContent = value;
+    const labelEl = els.tokenCount && els.tokenCount.previousElementSibling;
+    if (labelEl) labelEl.textContent = label;
   }
 
   // ─── Copy Functionality ──────────────────────────────────────────────────

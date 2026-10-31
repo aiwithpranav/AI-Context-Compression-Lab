@@ -367,6 +367,10 @@ test('the prompt for a recording talks about listening, not watching', () => {
   assert.doesNotMatch(audio, /shown on screen/);
 });
 
+test('question prompt asks for one bracketed time per citation, never a range', () => {
+  assert.match(P.VIDEO_QA_SYSTEM, /square brackets, one time per bracket, never a range/);
+});
+
 test('question prompt pins the answer language to the question language', () => {
   assert.match(P.VIDEO_QA_SYSTEM, /same language as the question/);
   assert.match(P.VIDEO_QA_SYSTEM, /Never switch to another language/);

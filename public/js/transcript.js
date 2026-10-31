@@ -163,6 +163,39 @@ const Transcript = (() => {
     return chunks.filter(c => ACTION_PATTERN.test(c.text) || NAMED_ACTION.test(c.text)).slice(0, max);
   }
 
+  // ─── Citations in answers ────────────────────────────────────────────────
+
+  // "[0:12]", "(10:58)", "[11:15-12:15]", "[1:05, 2:10]": times in square or round brackets.
+  // A time outside brackets ("at 5:30 pm") is left alone.
+  const CITATION = /([\[(])\s*(\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—,]\s*\d{1,2}:\d{2}(?::\d{2})?)*)\s*([\])])/g;
+  const TIME = /\d{1,2}:\d{2}(?::\d{2})?/g;
+
+  /**
+   * Split an answer into plain pieces and cited moments, so the page can turn
+   * each moment into a link. Models do not always follow "cite as [M:SS]", so
+   * round brackets and ranges are accepted too.
+   * `kind` is 'time' for a moment, 'bracket' for the ( [ ] ) around it, 'text' otherwise.
+   * @returns {{ text: string, seconds: number|null, kind: 'text'|'bracket'|'time' }[]}
+   */
+  function splitTimeRefs(text) {
+    const parts = [];
+    let last = 0;
+    for (const m of String(text).matchAll(CITATION)) {
+      if (m.index > last) parts.push({ text: text.slice(last, m.index), seconds: null, kind: 'text' });
+      parts.push({ text: m[1], seconds: null, kind: 'bracket' });
+      let inner = 0;
+      for (const t of m[2].matchAll(TIME)) {
+        if (t.index > inner) parts.push({ text: m[2].slice(inner, t.index), seconds: null, kind: 'text' });
+        parts.push({ text: t[0], seconds: parseTimestamp(t[0]), kind: 'time' });
+        inner = t.index + t[0].length;
+      }
+      parts.push({ text: m[3], seconds: null, kind: 'bracket' });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) parts.push({ text: text.slice(last), seconds: null, kind: 'text' });
+    return parts;
+  }
+
   // ─── Formatting ──────────────────────────────────────────────────────────
 
   function formatTime(sec) {
@@ -179,6 +212,7 @@ const Transcript = (() => {
 
   return {
     parseTimestamp,
+    splitTimeRefs,
     parseSubtitles,
     buildChunks,
     load,

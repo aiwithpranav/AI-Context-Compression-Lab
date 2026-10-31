@@ -29,6 +29,37 @@ Also: in the **Video Link** tab you choose between **Summarize with Gemini** (su
 
 ---
 
+## Screenshots
+
+Real output from the running app (OpenAI `gpt-4o-mini`, Gemini `gemini-flash-lite-latest`; public demo content — details in [docs/screenshots](docs/screenshots/README.md)).
+
+![Input screen: three sources, engine and level choice](docs/screenshots/01-input.png)
+
+![OpenAI summary and key points](docs/screenshots/02-text-summary.png)
+
+![Engine comparison and the LLM "Did the meaning survive?" test](docs/screenshots/03-comparison-evaluation.png)
+
+![Gemini video summary with timestamped key points](docs/screenshots/04-video-summary.png)
+
+![Questions about a video, with clickable timestamps](docs/screenshots/05-video-chat.png)
+
+![The whole video as audio](docs/screenshots/06-whole-video-audio.png)
+
+<img src="docs/screenshots/07-mobile.png" alt="The same result on a phone" width="320">
+
+### What a real run looks like
+
+One run on one text (a 188-word paragraph) — a sample to read the numbers by, not a benchmark:
+
+| Engine | Tokens (original 225) | Reduction | Keyword coverage | QA score |
+|---|---|---|---|---|
+| Extractive (offline) | 102 | 54.7 % | 83 % | — |
+| OpenAI `gpt-4o-mini` | 157 | 30.2 % | 67 % | **69 %** |
+
+The QA test caught real information loss: the OpenAI summary dropped the "100,000 words ≈ 130,000 tokens" figure and the measurement method, so two of eight questions came back *Missing* (and one *Partial*), while it found **no invented claims**. Keyword coverage alone would have said 67 % and told you nothing about *what* was lost.
+
+---
+
 ## Which model does what
 
 | Job | Provider | Why |
@@ -109,7 +140,7 @@ Optional: `OPENAI_MODEL`, `OPENAI_TTS_MODEL`, `GEMINI_MODEL` (pins one model and
 npm test
 ```
 
-107 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
+112 tests: transcript and subtitle parsing, the extractive engine, stats, document extraction (PDF / DOCX / XLSX / CSV fixtures), the server routes and request guard over real HTTP, and the OpenAI and Gemini layers against **fake APIs**. CI runs them on Node 20 and 22. They verify our request/response handling — structured-output schemas, timestamp mapping, retries, error messages, the 3-step evaluation. They do **not** verify the models' answer quality, and they cannot catch changes in the real OpenAI/Gemini APIs.
 
 ---
 
@@ -143,6 +174,7 @@ npm test
 ## Design decisions and limitations
 
 - **Keys stay on the server, and the server stays local.** It listens on `127.0.0.1` only and rejects foreign `Host` / `Origin` headers and non-JSON posts, so other devices and other websites can't spend your keys. It has no login or rate limiting — don't expose it publicly. Uploads are processed in memory and not stored. Details: [docs/SECURITY.md](docs/SECURITY.md).
+- **Questions on a long video use many tokens.** Each question sends the video to Gemini again (about 77,000 tokens for a 14-minute talk), so on the free tier a handful of questions in a couple of minutes can hit the per-minute limit; the app then says so (HTTP 429) and the limit clears after a short wait. Shorter videos and spaced-out questions avoid it.
 - **Whole-video audio** is a transcript read by a synthetic voice, not the original audio (copying that from YouTube is against its terms): it is complete, but about 15 % shorter than the video in a real 14-minute test (pauses, laughter and music are not spoken), the voice is not the speaker, and it is capped at about 45 minutes of speech. It takes about a minute or two and costs a cent or two per minute of audio.
 - **Recordings:** speech recognition mishears names (a test heard "Meera" as "Neira"), and Gemini does not label speakers, so check action-item owners. Recordings are buffered in memory while uploading (≤ 200 MB); export long video meetings as audio first. Recordings go to Google, briefing text to OpenAI.
 - **Videos have no source text**, so keyword coverage and the QA evaluation don't apply to them; stats use Gemini's token counts (the "original" is the video's token count, which depends on video length and resolution — requests use low frame resolution to save tokens).
@@ -167,6 +199,12 @@ npm test
 | [docs/SECURITY.md](docs/SECURITY.md) | Threats, mitigations, accepted risks |
 | [docs/TEST_PLAN.md](docs/TEST_PLAN.md) | What is tested, what is not, and the manual checklist for real API keys |
 | [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md) | Workflow and release notes |
+
+---
+
+## License
+
+[MIT](LICENSE) © 2026 Pranav.
 
 ---
 

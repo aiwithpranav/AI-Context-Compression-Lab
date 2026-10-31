@@ -15,13 +15,16 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - **LLM evaluation** ("Did the meaning survive?"): question-answering test plus unsupported-claim detection (FR-5, ADR-0005) and an **engine comparison** table (FR-6).
 - **Listen**: read the summary or key points aloud (FR-12).
 - Node server (`server/index.js`) holding API keys, fetching captions and parsing uploads (ADR-0001).
-- 107 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
+- 112 automated tests (no API keys needed), CI on Node 20 and 22, documentation set under `docs/`.
 
 - **Meeting recordings**: upload an MP3, M4A, WAV, MP4, MOV or WEBM (up to 200 MB); Gemini listens, then returns a summary, key points and action items with timestamps, and answers questions about it. The uploaded file is deleted on Clear or tab close (FR-15, ADR-0008).
 - **🎧 Audio** button in the Video Link tab, beside *Summarize with Gemini* and *Captions only*: turns the **whole video** into audio — Gemini writes out everything said, a voice reads it, in order — instead of a summary (FR-17, ADR-0009). The audio is close to the video's length but about 15 % shorter in a real 14-minute test, and the page shows its real length.
+- **MIT license** and screenshots of the real app (`docs/screenshots`).
 - **Audio of the summary**: after any summary, *Create audio of the summary (MP3)* makes an MP3 of the summary only (of the key points, if that is all you asked for), to play or download and listen to on a phone, for example while driving (FR-16, ADR-0008).
 
 ### Changed
+- The live token counter in the input box now shows the exact count (a moment after typing stops) instead of an estimate, so it matches the results.
+- Moments cited in video answers are linked even when the model writes `(10:58)` or a range like `[11:15-12:15]`, and the brackets are dropped around a link.
 - Project layout: browser files moved to `public/` (the only directory the server serves) and the server entry point to `server/index.js`.
 - Concept coverage: dropped the Jaccard term, scales the keyword set to text length, uses light stemming, and breaks ties by word length instead of position (ADR-0005).
 - Key points scale with text length, so a one-minute video no longer gets a long list.
@@ -30,6 +33,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Results show token counts without `~` when exact, and dashes instead of invented numbers when a value is unknown.
 
 ### Fixed
+- The page requested a missing `favicon.ico` on every load (a 404 in the console); it now has an inline icon.
 - Questions about a recording could be answered in another language (a real test answered an English question in Korean); the answer prompt now pins the question's language.
 - Video summaries could take minutes: the newest Gemini model was auto-picked and was overloaded (190 s for a 19-second video). The default is now speed-first with automatic fallback to the next model on 503/404/429/timeouts, and a 150 s timeout per attempt. Measured afterwards: 19-second video ≈ 6 s, 14-minute talk ≈ 27 s.
 - A 59-second video was shown as hours long: caption times in milliseconds were read as seconds. The unit is now chosen from the median caption duration.
@@ -47,7 +51,7 @@ First release with LLM engines. The baseline (initial upload) was a browser-only
 - Only front-end files are served; `.env` is git-ignored. See `docs/SECURITY.md`.
 
 ### Known issues
-- Automated tests use fake APIs. Verified by hand with real keys: Gemini video summaries, video and recording question-and-answer (including unanswerable and Marathi questions), recording upload and delete, MP3 briefings, and the OpenAI text flow. Whole-video audio was run with real keys on a 14-minute talk (transcription and one voiced piece) and end to end on a 19-second video, and the maintainer confirmed converting a real video to audio works. Not yet measured: the audio-to-video length ratio on a full-length video, the LLM evaluation (MT-3), a long Zoom/Meet MP4, and listening on a phone with the screen locked (`docs/TEST_PLAN.md`).
+- Automated tests use fake APIs. Verified by hand with real keys (2026-10-31): text compression and the 3-step LLM evaluation (a sample run: QA score 69 %, two of eight questions missing, no invented claims), Gemini summaries and multi-turn questions on a 14-minute talk including an unanswerable question, recording upload → summary → questions (English and Marathi) → delete, summary MP3s, and whole-video audio (a 19-second video and a real video; transcription of the 14-minute talk gave about 12 minutes of audio). Not yet: a long Zoom/Meet MP4, listening on a phone with the screen locked, and the audio-to-video length ratio on a full-length video (`docs/TEST_PLAN.md`).
+- Each question about a long video sends the video to Gemini again (about 77,000 tokens for a 14-minute talk), so the free tier's per-minute limit can be hit after a few questions in quick succession (the app reports it as HTTP 429).
 - Speech recognition can mishear names (a test heard "Meera" as "Neira"); check action-item owners.
 - `npm audit` reports moderate advisories via `exceljs` → `uuid`; the affected code path is not used (see `docs/SECURITY.md`).
-- No license file yet; `package.json` declares ISC by default and the owner should confirm.

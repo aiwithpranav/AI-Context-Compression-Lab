@@ -18,8 +18,8 @@
     "gemini",
     "tokens"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Pranav (https://github.com/aiwithpranav)",
+  "license": "MIT",
   "type": "module",
   "bugs": {
     "url": "https://github.com/aiwithpranav/AI-Context-Compression-Lab/issues"
